@@ -1,0 +1,25 @@
+<DEFINE ZIPOUT (S "AUX" B)
+	#DECL ((S) STRING
+	       (B) <BYTES 8>)
+	<SET B <GC-READ <OPEN "READB" <STRING .S ".ZIP">>>>
+	<IMAGE 28>
+	<MAPF <>
+	      <FUNCTION (B)
+			#DECL ((B) FIX)
+			<IMAGE <CONVERT-BYTE </ .B 16>>>
+			<IMAGE <CONVERT-BYTE <MOD .B 16>>>>
+	      .B>
+	<IMAGE 31>
+	<QUIT>>
+
+<DEFINE CONVERT-BYTE (B "AUX" (P #WORD 0))
+	#DECL ((VALUE B) FIX
+	       (P) WORD)
+	<OR <0? <CHTYPE <ANDB .B 1> FIX>> <SET P <XORB .P 1>>>
+	<OR <0? <CHTYPE <ANDB .B 2> FIX>> <SET P <XORB .P 1>>>
+	<OR <0? <CHTYPE <ANDB .B 4> FIX>> <SET P <XORB .P 1>>>
+	<OR <0? <CHTYPE <ANDB .B 8> FIX>> <SET P <XORB .P 1>>>
+	<+ .B
+	   32
+	   <* <CHTYPE .P FIX> 16>
+	   <* <CHTYPE <XORB .P 1> FIX> 32>>>

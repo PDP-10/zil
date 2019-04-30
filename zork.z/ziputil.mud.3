@@ -1,0 +1,17 @@
+<DEFINE SYM-DEFINE ("AUX" (G ,GLOBAL-SYMBOLS) (I <GET INITIAL OBLIST>))
+	#DECL ((G) <VECTOR [REST FIX STRING]> (I) OBLIST)
+	<REPEAT ()
+		<COND (<EMPTY? .G> <RETURN>)
+		      (T
+		       <SETG <OR <LOOKUP <2 .G> .I>
+				 <INSERT <2 .G> .I>>
+			     <1 .G>>
+		       <SET G <REST .G 2>>)>>>
+
+<DEFINE WHAT (N "AUX" (G ,GLOBAL-SYMBOLS))
+	<REPEAT ()
+		<COND (<SET G <MEMQ .N .G>>
+		       <PRINC <2 .G>>
+		       <PRINC !\ >
+		       <SET G <REST .G 2>>)
+		      (ELSE <RETURN ,NULL>)>>>

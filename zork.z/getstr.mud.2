@@ -1,0 +1,23 @@
+<DEFINE GETSTR (ZPC "AUX" (BYTE1 <>))
+	#DECL ((VALUE) ZSTR
+	       (ZPC) FIX
+	       (BYTE1) <OR FIX FALSE>)
+	<SET ZPC <POSNUM .ZPC>>
+	<MAPF <FUNCTION ("TUPLE" TUP)
+			#DECL ((VALUE) ZSTR
+			       (TUP) <TUPLE [REST FIX]>)
+			<CHTYPE <BYTES 5 !.TUP> ZSTR>>
+	      <FUNCTION (BYT "AUX" C1 C2 C3)
+			#DECL ((BYT C1 C2 C3) FIX)
+			<AND <NOT .BYTE1> <SET BYTE1 .BYT> <MAPRET>>
+			<SET BYT <+ <* .BYTE1 256> .BYT>>
+			<SET BYTE1 <>>
+			<SET C3 <MOD .BYT 32>>
+			<SET BYT </ .BYT 32>>
+			<SET C2 <MOD .BYT 32>>
+			<SET BYT </ .BYT 32>>
+			<SET C1 <MOD .BYT 32>>
+			<SET BYT </ .BYT 32>>
+			<AND <0? .BYT> <MAPRET .C1 .C2 .C3>>
+			<MAPSTOP .C1 .C2 .C3>>
+	      <REST ,ZCODE .ZPC>>>

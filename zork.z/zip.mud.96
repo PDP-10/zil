@@ -1,0 +1,958 @@
+<PACKAGE "ZIP">
+
+<ENTRY ZIP>
+
+<USE "ZSTR" "ZOPS" "ZAC">
+
+"********** GLOBAL DEFINITIONS **********"
+
+<GDECL (OPTABLE) !<VECTOR [256 <OR OP FALSE>]>
+       (ENDLOD OBJTAB VOCTAB VOCBEG VOCWORDS VOCWLEN GLOTAB ZPC ZTOP
+	ZBOT ZLOCS ZORKID OZPC DSBOT DSJFN) FIX
+       (ZCODE) <BYTES 8>
+       (ZSTACK) <UVECTOR [REST FIX]>
+       (RBREAKS SIBREAKS INSTR DSBUF) STRING
+       (TRACE? CTRACE? DTRACE?) <OR ATOM FALSE>
+       (DSYMBOLS) <BYTES 18>>
+
+<SETG BREAKS <STRING <ASCII 10>>>
+<MANIFEST BREAKS>
+
+<SETG NOARG *400000000000*>
+<MANIFEST NOARG>
+
+<SETG INSTR <ISTRING 0>>
+
+<SETG PZVERSION 0>
+<SETG PZORKID 2>
+<SETG PENDLOD 4>
+<SETG PSTART 6>
+<SETG PVOCAB 8>
+<SETG POBJECT 10>
+<SETG PGLOBALS 12>
+<SETG PCOUNT 32>
+<SETG PCALLS 34>
+<MANIFEST PZVERSION
+	  PZORKID
+	  PENDLOD
+	  PSTART
+	  PVOCAB
+	  POBJECT
+	  PGLOBALS
+	  PCOUNT
+	  PCALLS>
+
+"********** OPERATION HANDLING FUNCTIONS **********"
+
+<DEFOPS <MOBLIST OPS> <SETG OPTABLE <IVECTOR 256 <>>>>
+
+<SETG OPDEF
+      <FUNCTION (S) 
+	      <OPFUNCT ,<LOOKUP .S <GET OPS OBLIST>>
+		       ,<PARSE <STRING "OP-" .S>>>>>
+
+<DEFINE OP-EQUAL? (A1 A2 "OPTIONAL" (A3 ,NOARG) (A4 ,NOARG))
+	#DECL ((A1 A2 A3 A4) FIX)
+	<PUTPRED <OR <==? .A1 .A2> <==? .A1 .A3> <==? .A1 .A4>>>>
+<OPDEF "EQUAL?">
+
+<DEFINE OP-ZERO? (A1)
+	#DECL ((A1) FIX)
+	<PUTPRED <0? .A1>>>
+<OPDEF "ZERO?">
+
+<DEFINE OP-ADD (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <+ .A1 .A2>>>
+<OPDEF "ADD">
+
+<DEFINE OP-SUB (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <- .A1 .A2>>>
+<OPDEF "SUB">
+
+<DEFINE OP-MUL (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <* .A1 .A2>>>
+<OPDEF "MUL">
+
+<DEFINE OP-DIV (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL </ .A1 .A2>>>
+<OPDEF "DIV">
+
+<DEFINE OP-MOD (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <MOD .A1 .A2>>>
+<OPDEF "MOD">
+
+<DEFINE OP-RANDOM (A1)
+	#DECL ((A1) FIX)
+	<PUTVAL <+ <MOD <RANDOM> .A1> 1>>>
+<OPDEF "RANDOM">
+
+<DEFINE OP-LESS? (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTPRED <L? .A1 .A2>>>
+<OPDEF "LESS?">
+
+<DEFINE OP-GRTR? (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTPRED <G? .A1 .A2>>>
+<OPDEF "GRTR?">
+
+<DEFINE OP-BTST (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTPRED <0? <CHTYPE <ANDB <XORB .A1 -1> .A2> FIX>>>>
+<OPDEF "BTST">
+
+<DEFINE OP-BOR (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <CHTYPE <ORB .A1 .A2> FIX>>>
+<OPDEF "BOR">
+
+<DEFINE OP-BCOM (A1)
+	#DECL ((A1) FIX)
+	<PUTVAL <CHTYPE <XORB .A1 -1> FIX>>>
+<OPDEF "BCOM">
+
+<DEFINE OP-BAND (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAL <CHTYPE <ANDB .A1 .A2> FIX>>>
+<OPDEF "BAND">
+
+<DEFINE OP-MOVE (A1 A2 "AUX" (L1 <OBJLOC .A1>) (L2 <OBJLOC .A2>) SIBL)
+	#DECL ((A1 A2 L1 L2 SIBL) FIX)
+	<OP-REMOVE .A1>
+	<PUTBYTE <+ .L1 4> .A2>
+	<SET SIBL <GETBYTE <+ .L2 6>>>
+	<PUTBYTE <+ .L2 6> .A1>
+	<OR <0? .SIBL> <PUTBYTE <+ .L1 5> .SIBL>>>
+<OPDEF "MOVE">
+
+<DEFINE OP-REMOVE (A1 "AUX" (L1 <OBJLOC .A1>) PARENT LP SIBL LS)
+	#DECL ((A1 L1 PARENT LP SIBL LS) FIX)
+	<COND (<NOT <0? <SET PARENT <GETBYTE <+ .L1 4>>>>>
+	       <COND (<==? .A1
+			   <SET SIBL
+				<GETBYTE <+ <SET LP <OBJLOC .PARENT>> 6>>>>
+		      <PUTBYTE <+ .LP 6> <GETBYTE <+ .L1 5>>>)
+		     (T
+		      <REPEAT
+		       ()
+		       <AND <==? .A1
+				 <SET SIBL
+				      <GETBYTE <+ <SET LS <OBJLOC .SIBL>> 5>>>>
+			    <RETURN <PUTBYTE <+ .LS 5>
+					     <GETBYTE <+ .L1 5>>>>>>)>
+	       <PUTBYTE <+ .L1 4> 0>
+	       <PUTBYTE <+ .L1 5> 0>)>>
+<OPDEF "REMOVE">
+
+<DEFINE OP-FSET? (OBJ FLG "AUX" (OBLOC <OBJLOC .OBJ>))
+	#DECL ((OBJ FLG OBLOC) FIX)
+	<COND (<L? .FLG 16> <SET OBJ <GETWORD .OBLOC>>)
+	      (<SET FLG <- .FLG 16>> <SET OBJ <GETWORD <+ .OBLOC 2>>>)>
+	<PUTPRED <1? <CHTYPE <ANDB 1 <LSH .OBJ <- .FLG 15>>> FIX>>>>
+<OPDEF "FSET?">
+
+<DEFINE OP-FSET (OBJ FLG "AUX" (OBLOC <OBJLOC .OBJ>))
+	#DECL ((OBJ FLG OBLOC) FIX)
+	<COND (<L? .FLG 16> <SET OBJ <GETWORD .OBLOC>>)
+	      (<SET FLG <- .FLG 16>>
+	       <SET OBJ <GETWORD <SET OBLOC <+ .OBLOC 2>>>>)>
+	<PUTWORD .OBLOC <CHTYPE <ORB .OBJ <LSH 1 <- 15 .FLG>>> FIX>>>
+<OPDEF "FSET">
+
+<DEFINE OP-FCLEAR (OBJ FLG "AUX" (OBLOC <OBJLOC .OBJ>))
+	#DECL ((OBJ FLG OBLOC) FIX)
+	<COND (<L? .FLG 16> <SET OBJ <GETWORD .OBLOC>>)
+	      (<SET FLG <- .FLG 16>>
+	       <SET OBJ <GETWORD <SET OBLOC <+ .OBLOC 2>>>>)>
+	<PUTWORD .OBLOC
+		 <CHTYPE <ANDB .OBJ <XORB <LSH 1 <- 15 .FLG>> -1>> FIX>>>
+<OPDEF "FCLEAR">
+
+<DEFINE OP-LOC (OBJ)
+	#DECL ((OBJ) FIX)
+	<PUTVAL <GETBYTE <+ <OBJLOC .OBJ> 4>>>>
+<OPDEF "LOC">
+
+<DEFINE OP-FIRST? (OBJ) 
+	#DECL ((OBJ) FIX)
+	<PUTPRED <NOT <0? <PUTVAL <GETBYTE <+ <OBJLOC .OBJ> 6>>>>>>>
+
+<OPDEF "FIRST?">
+
+<DEFINE OP-NEXT? (OBJ) 
+	#DECL ((OBJ) FIX)
+	<PUTPRED <NOT <0? <PUTVAL <GETBYTE <+ <OBJLOC .OBJ> 5>>>>>>>
+
+<OPDEF "NEXT?">
+
+<DEFINE OP-IN? (OBJ1 OBJ2)
+	#DECL ((OBJ1 OBJ2) FIX)
+	<PUTPRED <==? .OBJ2 <GETBYTE <+ <OBJLOC .OBJ1> 4>>>>>
+<OPDEF "IN?">
+
+<DEFINE OP-GETP (OBJ PN "AUX" PL)
+	#DECL ((OBJ PN PL) FIX)
+	<SET PL <GETWORD <+ <OBJLOC .OBJ> 7>>>
+	<SET PL <+ .PL <* 2 <GETBYTE .PL>> 1>>
+	<PUTVAL
+	 <REPEAT (N)
+		 #DECL ((VALUE N) FIX)
+		 <COND (<==? <SET N <GETPROPN .PL>> .PN>
+			<RETURN <COND (<0? <SET N <GETPROPL .PL>>>
+				       <GETBYTE <+ .PL 1>>)
+				      (<1? .N> <GETWORD <+ .PL 1>>)
+				      (<ERROR PROPERTY-VALUE-TOO-LONG!-ERRORS
+					      OP-GETP
+					      .OBJ
+					      .PN>)>>)
+		       (<L? .N .PN>
+			<RETURN <GETWORD <+ ,OBJTAB <* .PN 2> -2>>>)>
+		 <SET PL <NEXTPROP .PL>>>>>
+<OPDEF "GETP">
+
+<DEFINE OP-PUTP (OBJ PN VAL "AUX" PL)
+	#DECL ((OBJ PN PL VAL) FIX)
+	<SET PL <GETWORD <+ <OBJLOC .OBJ> 7>>>
+	<SET PL <+ .PL <* 2 <GETBYTE .PL>> 1>>
+	<REPEAT (N)
+		#DECL ((N) FIX)
+		<COND (<==? <SET N <GETPROPN .PL>> .PN>
+		       <COND (<0? <SET N <GETPROPL .PL>>>
+			      <PUTBYTE <+ .PL 1> .VAL>)
+			     (<1? .N> <PUTWORD <+ .PL 1> .VAL>)
+			     (<ERROR PROPERTY-VALUE-TOO-LONG!-ERRORS
+				     OP-PUTP
+				     .OBJ
+				     .PN>)>
+		       <RETURN>)
+		      (<L? .N .PN>
+		       <ERROR NO-SUCH-PROPERTY!-ERRORS OP-PUTP .OBJ .PN .VAL>)>
+		<SET PL <NEXTPROP .PL>>>>
+<OPDEF "PUTP">
+
+<DEFINE OP-NEXTP (OBJ PN "AUX" PL)
+	#DECL ((OBJ PN PL) FIX)
+	<SET PL <GETWORD <+ <OBJLOC .OBJ> 7>>>
+	<SET PL <+ .PL <* 2 <GETBYTE .PL>> 1>>
+	<PUTVAL
+	 <COND
+	  (<0? .PN> <GETPROPN .PL>)
+	  (<REPEAT (N)
+		   #DECL ((VALUE N) FIX)
+		   <COND (<==? <SET N <GETPROPN .PL>> .PN>
+			  <RETURN <GETPROPN <NEXTPROP .PL>>>)
+			 (<L? .N .PN> <RETURN 0>)>
+		   <SET PL <NEXTPROP .PL>>>)>>>
+<OPDEF "NEXTP">
+
+<DEFINE OP-GET (TBL ITM)
+	#DECL ((TBL ITM) FIX)
+	<PUTVAL <GETWORD <+ .TBL <* .ITM 2>>>>>
+<OPDEF "GET">
+
+<DEFINE OP-GETB (TBL ITM)
+	#DECL ((TBL ITM) FIX)
+	<PUTVAL <GETBYTE <+ .TBL .ITM>>>>
+<OPDEF "GETB">
+
+<DEFINE OP-PUT (TBL ITM VAL)
+	#DECL ((TBL ITM VAL) FIX)
+	<PUTWORD <+ .TBL <* .ITM 2>> .VAL>>
+<OPDEF "PUT">
+
+<DEFINE OP-PUTB (TBL ITM VAL)
+	#DECL ((TBL ITM VAL) FIX)
+	<PUTBYTE <+ .TBL .ITM> .VAL>>
+<OPDEF "PUTB">
+
+<DEFINE OP-GETPT (OBJ PN "AUX" PL)
+	#DECL ((OBJ PN PL) FIX)
+	<SET PL <GETWORD <+ <OBJLOC .OBJ> 7>>>
+	<SET PL <+ .PL <* 2 <GETBYTE .PL>> 1>>
+	<PUTVAL
+	 <REPEAT (N)
+		 #DECL ((VALUE N) FIX)
+		 <COND (<==? <SET N <GETPROPN .PL>> .PN>
+			<RETURN <+ .PL 1>>)
+		       (<L? .N .PN> <RETURN 0>)>
+		 <SET PL <NEXTPROP .PL>>>>>
+<OPDEF "GETPT">
+
+<DEFINE OP-PTSIZE (PT)
+	#DECL ((PT) FIX)
+	<PUTVAL <+ 1 <GETPROPL <- .PT 1>>>>>
+<OPDEF "PTSIZE">
+
+<DEFINE OP-VALUE (VAR)
+	#DECL ((VAR) FIX)
+	<PUTVAL <GETVAR .VAR>>>
+<OPDEF "VALUE">
+
+<DEFINE OP-SET (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTVAR .A1 .A2>>
+<OPDEF "SET">
+
+<DEFINE OP-PUSH (A1)
+	#DECL ((A1) FIX)
+	<PUSHSTACK .A1>>
+<OPDEF "PUSH">
+
+<DEFINE OP-POP (A1)
+	#DECL ((A1) FIX)
+	<PUTVAR .A1 <POPSTACK>>>
+<OPDEF "POP">
+
+<DEFINE OP-INC (A1)
+	#DECL ((A1) FIX)
+	<PUTVAR .A1 <+ <GETVAR .A1> 1>>>
+<OPDEF "INC">
+
+<DEFINE OP-DEC (A1)
+	#DECL ((A1) FIX)
+	<PUTVAR .A1 <- <GETVAR .A1> 1>>>
+<OPDEF "DEC">
+
+<DEFINE OP-IGRTR? (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTPRED <G? <PUTVAR .A1 <+ <GETVAR .A1> 1>> .A2>>>
+<OPDEF "IGRTR?">
+
+<DEFINE OP-DLESS? (A1 A2)
+	#DECL ((A1 A2) FIX)
+	<PUTPRED <L? <PUTVAR .A1 <- <GETVAR .A1> 1>> .A2>>>
+<OPDEF "DLESS?">
+
+<DEFINE OP-READ (BUF RET
+		 "AUX" STR
+		       N
+		       (LEN <GETBYTE .BUF>)
+		       (RBREAKS ,RBREAKS)
+		       (SIBREAKS ,SIBREAKS))
+	#DECL ((BUF RET N LEN) FIX
+	       (STR RBREAKS SIBREAKS) STRING)
+	<SET STR <COND (<==? <LENGTH ,INSTR> .LEN> ,INSTR)
+		       (<SETG INSTR <ISTRING .LEN>>)>>
+	<SET N <READSTRING .STR ,INCHAN ,BREAKS>>
+	<READCHR ,INCHAN>
+	<COND (<==? .N .LEN>
+	       <PRINC "Input line too long, flushing: ">
+	       <REPEAT () <AND <==? <PRINC <READCHR>> ,EOLCHR> <RETURN>>>)>
+	<MAPR <>
+	      <FUNCTION (RSTR)
+			#DECL ((RSTR) STRING)
+			<AND <G=? <ASCII <1 .RSTR>> <ASCII !\A>>
+			     <L=? <ASCII <1 .RSTR>> <ASCII !\Z>>
+			     <PUT .RSTR 1 <ASCII <+ <ASCII <1 .RSTR>> 32>>>>>
+	      .STR>
+	<PUTBYTE
+	 <+ .RET 1>
+	 <REPEAT ((STR .STR)
+		  (WRD <ISTRING 6>)
+		  (N .N)
+		  (P 0)
+		  W1
+		  W2
+		  (MAXWRDS <GETBYTE .RET>)
+		  (RET <+ .RET 2>)
+		  (WRDS 0)
+		  C
+		  POS
+		  ZS
+		  ZS6)
+		 #DECL ((VALUE N P W1 W2 MAXWRDS RET WRDS POS) FIX
+			(STR WRD) STRING
+			(C) CHARACTER
+			(ZS) ZSTR
+			(ZS6) !<BYTES 5 6>)
+		 <AND <0? .N> <0? .P> <RETURN .WRDS>>
+		 <AND <==? .P 6>
+		      <REPEAT ()
+			      <COND (<OR <0? .N> <MEMQ <1 .STR> .RBREAKS>>
+				     <RETURN>)>
+			      <SET STR <REST .STR>>
+			      <SET N <- .N 1>>
+			      <SET P <+ .P 1>>>>
+		 <COND (<COND (<0? .P>
+			       <SET POS <- .LEN <LENGTH .STR> -1>>
+			       <SET C <1 .STR>>
+			       <SET STR <REST .STR>>
+			       <SET N <- .N 1>>
+			       <COND (<MEMQ .C .SIBREAKS>
+				      <PUT .WRD <SET P 1> .C>)
+				     (<MEMQ .C .RBREAKS> <>)
+				     (<PUT .WRD <SET P 1> .C> <>)>)
+			      (<0? .N>)
+			      (<MEMQ <1 .STR> .RBREAKS>)
+			      (<PUT .WRD <SET P <+ .P 1>> <1 .STR>>
+			       <SET STR <REST .STR>>
+			       <SET N <- .N 1>>
+			       <>)>
+			<PUTBYTE <+ .RET 2> .P>
+			<PUTBYTE <+ .RET 3> .POS>
+			<SET ZS <STRING-ZSTR <COND (<G=? .P 6> .WRD)
+						   (<SUBSTRUC .WRD 0 .P>)>>>
+			<SET ZS6
+			     <SUBSTRUC .ZS
+				       0
+				       <COND (<G=? <LENGTH .ZS> 6> 6)
+					     (<LENGTH .ZS>)>
+				       <IBYTES 5 6 ,PADCHR>>>
+			<SET W1 <CHTYPE <ORB <LSH <1 .ZS6> 10>
+					     <LSH <2 .ZS6> 5>
+					     <3 .ZS6>>
+					FIX>>
+			<SET W2 <CHTYPE <ORB *100000*
+					     <LSH <4 .ZS6> 10>
+					     <LSH <5 .ZS6> 5>
+					     <6 .ZS6>>
+					FIX>>
+			<PUTWORD
+			 .RET
+			 <REPEAT ((WL ,VOCWLEN)
+				  (CL <* .WL
+					 <CHTYPE <LSH 1 <FIX </ <LOG ,VOCWORDS>
+								<LOG 2>>>>
+						 FIX>>)
+				  (VE <+ ,VOCBEG <* .WL <- ,VOCWORDS 1>>>)
+				  (CW <- <+ ,VOCBEG .CL> .WL>)
+				  W
+				  UP?)
+				 #DECL ((VALUE WL CL VE CW W) FIX
+					(UP?) <OR ATOM FALSE>)
+				 <SET CL </ .CL 2>>
+				 <SET UP?
+				      <COND (<G? .W1 <SET W <GETWORD .CW>>>)
+					    (<L? .W1 .W> <>)
+					    (<G? .W2
+						 <SET W
+						      <CHTYPE
+						       <ANDB <GETWORD <+ .CW
+									 2>>
+							     *177777*>
+						       FIX>>>)
+					    (<L? .W2 .W> <>)
+					    (<RETURN .CW>)>>
+				 <AND <L? .CL .WL> <RETURN 0>>
+				 <COND (.UP?
+					<SET CW <+ .CW .CL>>
+					<AND <G? .CW .VE> <SET CW .VE>>)
+				       (<SET CW <- .CW .CL>>)>>>
+			<SET RET <+ .RET 4>>
+			<COND (<G? <SET WRDS <+ .WRDS 1>> .MAXWRDS>
+			       <ERROR TOO-MANY-WORDS!-ERRORS
+				      OP-READ
+				      <TOP .STR>>
+			       <RETURN <- .WRDS 1>>)>
+			<SET P 0>)>>>
+	<REPEAT ()
+		<AND <0? .N> <RETURN>>
+		<PUTBYTE <SET BUF <+ .BUF 1>> <ASCII <1 .STR>>>
+		<SET STR <REST .STR>>
+		<SET N <- .N 1>>>>
+<OPDEF "READ">
+
+<DEFINE OP-CRLF ()
+	<CRLF>>
+<OPDEF "CRLF">
+
+<DEFINE OP-PRINTC (CHR)
+	#DECL ((CHR) FIX)
+	<PRINC <ASCII .CHR>>>
+<OPDEF "PRINTC">
+
+<DEFINE OP-PRINTN (NUM)
+	#DECL ((NUM) FIX)
+	<PRIN1 .NUM>>
+<OPDEF "PRINTN">
+
+<DEFINE OP-PRINT (NUM)
+	#DECL ((NUM) FIX)
+	<PRINC <ZSTR-STRING <GETSTR <* .NUM 2>>>>>
+<OPDEF "PRINT">
+
+<DEFINE OP-PRINTB (NUM)
+	#DECL ((NUM) FIX)
+	<PRINC <ZSTR-STRING <GETSTR .NUM>>>>
+<OPDEF "PRINTB">
+
+<DEFINE OP-PRINTT (TBL NUM)
+	#DECL ((TBL NUM) FIX)
+	<PRINC <ZSTR-STRING <GETSTR <+ .TBL .NUM>>>>>
+<OPDEF "PRINTT">	;"Obsolete"
+
+<DEFINE OP-PRINTD (OBJ)
+	#DECL ((OBJ) FIX)
+	<PRINC <ZSTR-STRING <GETSTR <+ 1 <GETWORD <+ <OBJLOC .OBJ> 7>>>>>>>
+<OPDEF "PRINTD">
+
+<DEFINE OP-PRINTI ()
+	<PRINC <ZSTR-STRING <NEXTSTR>>>>
+<OPDEF "PRINTI">
+
+<DEFINE OP-PRINTR ()
+	<OP-PRINTI>
+	<OP-RTRUE>>
+<OPDEF "PRINTR">
+
+<DEFINE OP-CALL (NUM "TUPLE" TUP)
+	#DECL ((NUM) FIX
+	       (TUP) <TUPLE [REST FIX]>)
+	<COND (<0? .NUM>
+	       <COND (,CTRACE?
+		      <PRINC "
+		">
+		      <PRINC <NTH ,ZINDENTS ,ZLEVEL>>
+		      <SETG ZLEVEL <- ,ZLEVEL 1>>
+		      <PRINC "Returning: ">)>
+	       <PUTVAL 0>)
+	      (T
+	       <PUTWORD ,PCALLS <+ <GETWORD ,PCALLS> 1>>
+	       <PUSHSTACK ,ZPC>
+	       <PUSHSTACK ,ZLOCS>
+	       <PUSHSTACK ,ZBOT>
+	       <SETG ZPC <* .NUM 2>>
+	       <SETG ZLOCS <+ ,ZTOP 1>>
+	       <SETG ZBOT <+ ,ZTOP <SET NUM <NEXTBYTE>>>>
+	       <REPEAT ()
+		       <COND (<0? .NUM> <RETURN>)
+			     (<EMPTY? .TUP> <PUSHSTACK <NEXTWORD>>)
+			     (T
+			      <PUSHSTACK <1 .TUP>>
+			      <NEXTWORD>
+			      <SET TUP <REST .TUP>>)>
+		       <SET NUM <- .NUM 1>>>
+	       <OR <EMPTY? .TUP>
+		   <ERROR TOO-MANY-ARGUMENTS!-ERRORS OP-CALL .NUM .TUP>>)>>
+<OPDEF "CALL">
+
+<DEFINE OP-RETURN (VAL)
+	#DECL ((VAL) FIX)
+	<SETG ZTOP <- ,ZLOCS 1>>
+	<SETG ZBOT 0>
+	<SETG ZBOT <POPSTACK>>
+	<SETG ZLOCS <POPSTACK>>
+	<SETG ZPC <POPSTACK>>
+	<COND (,CTRACE?
+	       <PRINC "
+		">
+	       <PRINC <NTH ,ZINDENTS ,ZLEVEL>>
+	       <SETG ZLEVEL <- ,ZLEVEL 1>>)>
+	<COND (<OR ,TRACE? ,CTRACE?>
+	       <PRINC "Returning: ">)>
+	<PUTVAL .VAL>>
+<OPDEF "RETURN">
+
+<DEFINE OP-RTRUE ()
+	<OP-RETURN 1>>
+<OPDEF "RTRUE">
+
+<DEFINE OP-RFALSE ()
+	<OP-RETURN 0>>
+<OPDEF "RFALSE">
+
+<DEFINE OP-JUMP (NUM)
+	#DECL ((NUM) FIX)
+	<SETG ZPC <+ ,ZPC .NUM -2>>>
+<OPDEF "JUMP">
+
+<DEFINE OP-RSTACK ()
+	<OP-RETURN <POPSTACK>>>
+<OPDEF "RSTACK">
+
+<DEFINE OP-FSTACK ()
+	<POPSTACK>>
+<OPDEF "FSTACK">
+
+<DEFINE OP-SAVE ("AUX" CHAN)
+	#DECL ((CHAN) <OR CHANNEL FALSE>)
+	<COND (<NOT <SET CHAN <OPEN "PRINTB" <STRING <GET-NAME> ".ZORKSAVE">>>>
+	       <ERROR OPEN-FAILED!-ERRORS OP-SAVE .CHAN>)
+	      (<GC-DUMP [,ZORKID
+			 <SUBSTRUC ,ZCODE 0 ,ENDLOD>
+			 ,ZPC
+			 ,ZSTACK
+			 ,ZTOP
+			 ,ZBOT
+			 ,ZLOCS]
+			.CHAN>
+	       <CLOSE .CHAN>)>>
+<OPDEF "SAVE">
+
+<DEFINE OP-RESTORE ("AUX" CHAN GAM)
+	#DECL ((CHAN) <OR CHANNEL FALSE>
+	       (GAM) !<VECTOR FIX <BYTES 8> FIX <UVECTOR [REST FIX]> [3 FIX]>)
+	<COND (<NOT <SET CHAN <OPEN "READB" <STRING <GET-NAME> ".ZORKSAVE">>>>
+	       <ERROR OPEN-FAILED!-ERRORS OP-RESTORE .CHAN>)
+	      (T
+	       <SET GAM <GC-READ .CHAN>>
+	       <CLOSE .CHAN>
+	       <OR <==? <1 .GAM> ,ZORKID>
+		   <ERROR WRONG-VERSION-OR-GAME!-ERRORS OP-RESTORE .GAM>>
+	       <SUBSTRUC <2 .GAM> 0 ,ENDLOD ,ZCODE>
+	       <SETG ZPC <3 .GAM>>
+	       <SETG ZSTACK <4 .GAM>>
+	       <SETG ZTOP <5 .GAM>>
+	       <SETG ZBOT <6 .GAM>>
+	       <SETG ZLOCS <7 .GAM>>)>>
+<OPDEF "RESTORE">
+
+<DEFINE GET-NAME ("AUX" NAM)
+	<PROG ()
+	      <PRINC "
+Name: ">
+	      <SET NAM <READ>>
+	      <COND (<TYPE? .NAM ATOM>
+		     <SPNAME .NAM>)
+		    (T
+		     <PRINC "
+Illegal save/restore name, try again...">
+		     <AGAIN>)>>>
+
+<DEFINE OP-RESTART () <AGAIN .GAME>>
+<OPDEF "RESTART">
+
+<DEFINE OP-QUIT () <QUIT>>
+<OPDEF "QUIT">
+
+<DEFINE OP-NOOP () <TIME>>
+<OPDEF "NOOP">
+
+"********** LOW LEVEL FUNCTIONS **********"
+
+<DEFINE NEXTBYTE ("AUX" (ZPC ,ZPC))
+	#DECL ((VALUE ZPC) FIX)
+	<SETG ZPC <+ .ZPC 1>>
+	<GETBYTE .ZPC>>
+
+<DEFINE NEXTWORD ("AUX" (ZPC ,ZPC))
+	#DECL ((VALUE ZPC) FIX)
+	<SETG ZPC <+ .ZPC 2>>
+	<GETWORD .ZPC>>
+
+<DEFINE NEXTSTR ("AUX" (ZPC ,ZPC) STR)
+	#DECL ((VALUE STR) ZSTR
+	       (ZPC) FIX)
+	<SET STR <GETSTR .ZPC>>
+	<SETG ZPC <+ .ZPC <* 2 </ <LENGTH .STR> 3>>>>
+	.STR>
+
+<DEFMAC POSNUM ('ZPC)
+	#DECL ((VALUE ZPC) FORM)
+	<FORM CHTYPE <FORM ANDB .ZPC *377777*> FIX>>
+
+<DEFINE GETBYTE (ZPC)
+	#DECL ((VALUE ZPC) FIX)
+	<SET ZPC <POSNUM .ZPC>>
+	<NTH ,ZCODE <+ .ZPC 1>>>
+
+<DEFINE GETWORD (ZPC "OPTIONAL" (SIGNED? T) "AUX" (ZCODE ,ZCODE) WRD)
+	#DECL ((VALUE ZPC WRD) FIX
+	       (ZCODE) <BYTES 8>
+	       (SIGNED?) <OR ATOM FALSE>)
+	<SET ZPC <POSNUM .ZPC>>
+	<SET WRD <+ <* 256 <NTH .ZCODE <+ .ZPC 1>>> <NTH .ZCODE <+ .ZPC 2>>>>
+	<COND (<NOT .SIGNED?>)
+	      (<0? <CHTYPE <ANDB .WRD *100000*> FIX>>)
+	      (<SET WRD <CHTYPE <ORB .WRD *777777600000*> FIX>>)>
+	.WRD>
+
+<FLOAD "GETSTR">	;"until compiler bug is fixed"
+
+<DEFINE PUTBYTE (ZPC BYT)
+	#DECL ((VALUE ZPC BYT) FIX)
+	<SET ZPC <POSNUM .ZPC>>
+	<OR <0? <CHTYPE <ANDB .BYT *777777777400*> FIX>>
+	    <ERROR NUMBER-OUT-OF-RANGE!-ERRORS PUTBYTE .ZPC .BYT>>
+	<AND <G=? .ZPC ,ENDLOD>
+	     <ERROR ATTEMPT-TO-MODIFY-READ-ONLY-DATA!-ERRORS
+		    PUTBYTE
+		    .ZPC
+		    .BYT>>
+	<PUT ,ZCODE <+ .ZPC 1> .BYT>
+	.ZPC>
+
+<DEFINE PUTWORD (ZPC WRD)
+	#DECL ((VALUE ZPC WRD) FIX)
+	<SET ZPC <POSNUM .ZPC>>
+	<COND (<OR <0? <CHTYPE <ANDB .WRD *777777600000*> FIX>>
+		   <==? #WORD -1 <ORB .WRD *77777*>>>)
+	      (<ERROR NUMBER-OUT-OF-RANGE!-ERRORS PUTWORD .ZPC .WRD>)>
+	<AND <G=? <+ .ZPC 1> ,ENDLOD>
+	     <ERROR ATTEMPT-TO-MODIFY-READ-ONLY-DATA!-ERRORS
+		    PUTWORD
+		    .ZPC
+		    .WRD>>
+	<SET WRD <CHTYPE <ANDB .WRD *177777*> FIX>>
+	<PUT <PUT ,ZCODE <+ .ZPC 1> </ .WRD 256>> <+ .ZPC 2> <MOD .WRD 256>>
+	.ZPC>
+
+<DEFINE GETARG (N)
+	#DECL ((VALUE N) FIX)
+	<COND (<0? .N> <NEXTWORD>)
+	      (<1? .N> <NEXTBYTE>)
+	      (<GETVAR <NEXTBYTE> T>)>>
+
+<DEFINE GETVAR (VAR "OPTIONAL" (UPDSTK? <>))
+	#DECL ((VALUE VAR) FIX
+	       (UPDSTK?) <OR ATOM FALSE>)
+	<COND (<0? .VAR>
+	       <COND (.UPDSTK? <POPSTACK>)
+		     (<==? ,ZTOP ,ZBOT> <ERROR STACK-EMPTY!-ERRORS>)
+		     (<NTH ,ZSTACK ,ZTOP>)>)
+	      (<L? .VAR 16>
+	       <COND (<G? .VAR <- ,ZBOT ,ZLOCS -1>>
+		      <ERROR ATTEMPT-TO-ACCESS-UNDEFINED-LOCAL!-ERRORS
+			     GETVAR
+			     .VAR>)
+		     (<NTH ,ZSTACK <+ ,ZLOCS .VAR -1>>)>)
+	      (<GETWORD <+ ,GLOTAB <* 2 <- .VAR 16>>>>)>>
+
+<DEFINE PUTVAR (VAR VAL "OPTIONAL" (UPDSTK? <>))
+	#DECL ((VALUE VAR VAL) FIX
+	       (UPDSTK?) <OR ATOM FALSE>)
+	<COND (<0? .VAR>
+	       <COND (.UPDSTK? <PUSHSTACK .VAL>)
+		     (<==? ,ZTOP ,ZBOT> <ERROR STACK-EMPTY!-ERRORS>)
+		     (<PUT ,ZSTACK ,ZTOP .VAL>)>)
+	      (<L? .VAR 16>
+	       <COND (<G? .VAR <- ,ZBOT ,ZLOCS -1>>
+		      <ERROR ATTEMPT-TO-ACCESS-UNDEFINED-LOCAL!-ERRORS
+			     PUTVAR
+			     .VAR>)
+		     (<PUT ,ZSTACK <+ ,ZLOCS .VAR -1> .VAL>)>)
+	      (<PUTWORD <+ ,GLOTAB <* 2 <- .VAR 16>>> .VAL>)>
+	.VAL>
+
+<DEFINE PUTVAL (VAL "AUX" (VAR <NEXTBYTE>))
+	#DECL ((VAL LOC) FIX)
+	<COND (,TRACE?
+	       <PRIN1 .VAL>
+	       <PRINC ">">
+	       <PRIN1 .VAR>)>
+	<PUTVAR .VAR .VAL T>>
+
+<DEFINE PUTPRED (PRED "AUX" (LOC <NEXTBYTE>) (INV? <>))
+	#DECL ((PRED INV?) <OR ATOM FALSE>
+	       (LOC) FIX)
+	<AND <0? <CHTYPE <ANDB .LOC 128> FIX>>
+	     <SET INV? T>>
+	<AND ,TRACE? <COND (.INV? <PRINC "\\">) (<PRINC !\/>)>>
+	<SET LOC
+	     <COND (<0? <CHTYPE <ANDB .LOC 64> FIX>>
+		    <+ <* 256 <MOD .LOC 64>> <NEXTBYTE>>)
+		   (<MOD .LOC 64>)>>
+	<OR <0? <CHTYPE <ANDB .LOC *20000*> FIX>>
+	    <SET LOC <CHTYPE <ORB .LOC *777777740000*> FIX>>>
+	<COND (<OR <AND .PRED <NOT .INV?>>
+		   <AND <NOT .PRED> .INV?>>
+	       <COND (<0? .LOC>
+		      <AND ,TRACE? <PRINC "FALSE">>
+		      <OP-RFALSE>)
+		     (<1? .LOC>
+		      <AND ,TRACE? <PRINC "TRUE">>
+		      <OP-RTRUE>)
+		     (<SETG ZPC <+ ,ZPC .LOC -2>>
+		      <AND ,TRACE? <PRIN1 ,ZPC>>)>)>>
+
+
+"********** STACK HACKERS **********"
+
+<DEFINE POPSTACK ()
+	#DECL ((VALUE) FIX)
+	<AND <L? <SETG ZTOP <- ,ZTOP 1>> ,ZBOT>
+	     <ERROR STACK-OVERPOPPED!-ERRORS POPSTACK>>
+	<NTH ,ZSTACK <+ ,ZTOP 1>>>
+
+<DEFINE PUSHSTACK (VAL)
+	#DECL ((VAL) FIX)
+	<PUT ,ZSTACK <SETG ZTOP <+ ,ZTOP 1>> .VAL>>
+
+
+"********** OBJECT HACKERS **********"
+
+<DEFINE OBJLOC (OBJ)
+	#DECL ((VALUE OBJ) FIX)
+	<AND <0? .OBJ> <ERROR BAD-OBJECT-NUMBER!-ERRORS OBJLOC .OBJ>>
+	<+ ,OBJTAB <* .OBJ 9> 53>>
+
+<DEFINE GETPROPN (PL)
+	#DECL ((VALUE PL) FIX)
+	<MOD <GETBYTE .PL> 32>>
+
+<DEFINE GETPROPL (PL)
+	#DECL ((VALUE PL) FIX)
+	</ <GETBYTE .PL> 32>>
+
+<DEFINE NEXTPROP (PL)
+	#DECL ((VALUE PL) FIX)
+	<+ .PL <GETPROPL .PL> 2>>
+
+
+"********** HIGH LEVEL FUNCTIONS **********"
+
+<DEFINE ZIP GAME (FILE "OPTIONAL" (TRACE? <>) (CTRACE? <>) (DTRACE? <>)
+		       "AUX" ZIN N DSTUFF)
+	#DECL ((FILE) STRING
+	       (TRACE? CTRACE? DTRACE?) <OR ATOM FALSE>
+	       (ZIN) <OR CHANNEL FALSE>
+	       (GAME) <SPECIAL ACTIVATION>
+	       (N) FIX
+	       (DSTUFF) <LIST FIX <BYTES 18>>)
+	<COND (<SET ZIN <OPEN "READ" <STRING .FILE
+					     <COND (<L? ,MUDDLE 100> !\ )
+						   (!\.)>
+					     "ZSYM">>>
+	       <SETG GLOBAL-SYMBOLS <READ .ZIN>>
+	       <CLOSE .ZIN>)
+	      (<ERROR OPEN-FAILED!-ERRORS ZAP .FILE .ZIN>)>
+	<COND (<SET ZIN <OPEN "READB" <STRING .FILE
+					      <COND (<L? ,MUDDLE 100> !\ )
+						    (!\.)>
+					      "ZIP">>>
+	       <SETG ZCODE <GC-READ .ZIN>>
+	       <CLOSE .ZIN>)
+	      (<ERROR OPEN-FAILED!-ERRORS ZAP .FILE .ZIN>)>
+	<OR <==? <GETWORD 0> *400*>
+	    <ERROR INCOMPATIBLE-GAME-VERSION!-ERRORS ZIP>>
+	<SETG ZORKID <GETWORD ,PZORKID>>
+	<SETG ENDLOD <GETWORD ,PENDLOD <>>>
+	<SETG ZPC <GETWORD ,PSTART <>>>
+	<SETG VOCTAB <GETWORD ,PVOCAB>>
+	<SET N <GETBYTE ,VOCTAB>>
+	<SETG SIBREAKS
+	      <MAPF ,STRING
+		    <FUNCTION (C)
+			      #DECL ((VALUE) CHARACTER
+				     (C) FIX)
+			      <AND <0? .N> <MAPSTOP>>
+			      <SET N <- .N 1>>
+			      <ASCII .C>>
+		    <REST ,ZCODE <+ ,VOCTAB 1>>>>
+	<SETG RBREAKS <STRING ".,?"
+			      <ASCII 32>
+			      <ASCII 9>
+			      <ASCII 13>
+			      <ASCII 12>
+			      <ASCII 27>
+			      ,SIBREAKS>>
+	<SETG VOCWLEN <GETBYTE <SET N <+ <GETBYTE ,VOCTAB> ,VOCTAB 1>>>>
+	<SETG VOCWORDS <GETWORD <+ .N 1>>>
+	<SETG VOCBEG <+ .N 3>>
+	<SETG OBJTAB <GETWORD ,POBJECT>>
+	<SETG GLOTAB <GETWORD ,PGLOBALS>>
+	<SETG ZBOT 0>
+	<SETG ZTOP 0>
+	<SETG ZLOCS 1>
+	<SETG ZSTACK <IUVECTOR 128 0>>
+	<PUT ,OUTCHAN 13 <CHTYPE <MIN> FIX>>
+	<SET REP ,ZREP>
+	<SETG TRACE? .TRACE?>
+	<SETG CTRACE? .CTRACE?>
+	<COND (<NOT <SETG DTRACE? .DTRACE?>>)
+	      (<SET ZIN <OPEN "READB" <STRING .FILE ".DSYMBOLS">>>
+	       <SET DSTUFF <GC-READ .ZIN>>
+	       <CLOSE .ZIN>
+	       <SETG DSBOT <1 .DSTUFF>>
+	       <SETG DSYMBOLS <2 .DSTUFF>>
+	       <SETG DSJFN <DSOPEN <STRING .FILE ".DTEXT" <ASCII 0>>>>
+	       <SETG DSBUF <ISTRING 1024>>)
+	      (<ERROR OPEN-FAILED!-ERRORS ZAP .FILE .ZIN>)>
+	<PUT <1 <BACK ,INCHAN>> 6 #LOSE 10>
+	<REPEAT ((OPTABLE ,OPTABLE) OPBYT ZOP ARGBYT ARG1 ARG2 (INSDIV 10))
+		#DECL ((OPTABLE) !<VECTOR [256 <OR OP FALSE>]>
+		       (OPBYT ARGBYT ARG1 ARG2 INSDIV) FIX
+		       (ZOP) <OR FALSE OP>)
+		<SETG OZPC ,ZPC>
+		<COND (<0? <SET INSDIV <- .INSDIV 1>>>
+		       <SET INSDIV 10>
+		       <PUTWORD ,PCOUNT <+ <GETWORD ,PCOUNT> 1>>)>
+		<OR <SET ZOP <NTH .OPTABLE <+ <SET OPBYT <NEXTBYTE>> 1>>>
+		    <RETURN <ERROR ILLEGAL-OPERATION!-ERRORS ZIP .OPBYT>>>
+		<COND (<L? .OPBYT 128>
+		       <SET ARG1 <NEXTBYTE>>
+		       <SET ARG2 <NEXTBYTE>>
+		       <OR <0? <CHTYPE <ANDB .OPBYT 32> FIX>>
+			   <SET ARG2 <GETVAR .ARG2 T>>>
+		       <OR <0? <CHTYPE <ANDB .OPBYT 64> FIX>>
+			   <SET ARG1 <GETVAR .ARG1 T>>>
+		       <ZAPPLY .ZOP .ARG1 .ARG2>)
+		      (<L? .OPBYT 176>
+		       <ZAPPLY .ZOP
+			       <GETARG </ <CHTYPE <ANDB .OPBYT 48> FIX> 16>>>)
+		      (<L? .OPBYT 192> <ZAPPLY .ZOP>)
+		      (<SET ARGBYT <NEXTBYTE>>
+		       <ZAPPLY .ZOP
+			       !<MAPF ,LIST
+				      <FUNCTION (N)
+						#DECL ((VALUE N) FIX)
+						<SET N </ <CHTYPE <ANDB .ARGBYT
+									*300*>
+								  FIX>
+							  64>>
+						<SET ARGBYT <* .ARGBYT 4>>
+						<AND <==? .N 3> <MAPSTOP>>
+						<GETARG .N>>
+				      '(1 2 3 4)>>)>>>
+
+
+"********** DEBUGGING AIDS **********"
+
+<DEFINE ZREP ("AUX" (ZREP? <BOUND? ZREP?>))
+	#DECL ((ZREP?) <SPECIAL <OR ATOM FALSE>>)
+	<COND (.ZREP? <REP>)
+	      (<PUT ,OUTCHAN 13 80>
+	       <PUT <1 <BACK ,INCHAN>> 6 #LOSE 27>
+	       <UNWIND <REP>
+		       <PROG ()
+			     <PUT ,OUTCHAN 13 <CHTYPE <MIN> FIX>>
+			     <PUT <1 <BACK ,INCHAN>> 6 #LOSE 10>>>
+	       <PUT ,OUTCHAN 13 <CHTYPE <MIN> FIX>>
+	       <PUT <1 <BACK ,INCHAN>> 6 #LOSE 10>)>>
+
+<SETG ZLEVEL 0>
+<SETG ZINDENTS ["" " " "  " "   " "    " "     " "      " "       " "        " "         " "          " "           " "            " "             "]>
+<GDECL (ZLEVEL) FIX (ZINDENTS) <VECTOR [REST STRING]>>
+
+<DEFINE ZAPPLY (ZOP "TUPLE" TUP "AUX" (ATM <OPATOM .ZOP>))
+	#DECL ((ZOP) OP
+	       (TUP) <TUPLE [REST FIX]>
+	       (ATM) ATOM)
+	<COND (,DTRACE?
+	       <AND <0? <NTH ,DSYMBOLS <- ,OZPC ,DSBOT>>>
+		    <ERROR ATTEMPT-TO-EXECUTE-NON-INSTRUCTION!-ERRORS ZAPPLY>>
+	       <OR <0? <14 .OUTCHAN>> <CRLF>>
+	       <PRINC !\(>
+	       <DSREAD <NTH ,DSYMBOLS <- ,OZPC ,DSBOT>> ,DSJFN ,DSBUF>
+	       <PRINC ")	">)>
+	<COND (<OR ,TRACE? <AND ,CTRACE? <==? .ATM CALL!-OPS>>>
+	       <OR <0? <14 .OUTCHAN>> ,DTRACE? <CRLF>>
+	       <PRIN1 ,OZPC>
+	       <COND (<AND ,CTRACE? <==? .ATM CALL!-OPS>>
+		      <PRINC ": ">
+		      <PRIN1 <+ ,ZLEVEL 1>>
+		      <PRINC "	">
+		      <PRINC <NTH ,ZINDENTS <SETG ZLEVEL <+ ,ZLEVEL 1>>>>)
+		     (T
+		      <PRINC ":	">)>
+	       <PRINC .ATM>
+	       <PRINC <ASCII 9>>
+	       <COND (<AND ,CTRACE? <==? .ATM CALL!-OPS> <NOT <EMPTY? .TUP>>>
+		      <PRINC "(">
+		      <PRINC <2 <MEMQ <* <1 .TUP> 2> ,GLOBAL-SYMBOLS>>>
+		      <PRINC ") ">)>
+	       <MAPF <>
+		     <FUNCTION (NUM)
+			       #DECL ((NUM) FIX)
+			       <PRIN1 .NUM>
+			       <PRINC <ASCII 32>>>
+		     .TUP>
+	       <PRINC "; ">)>
+	<APPLY <OPFUNCT .ZOP> !.TUP>>
+
+<ENDPACKAGE>

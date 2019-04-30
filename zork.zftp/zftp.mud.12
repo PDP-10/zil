@@ -1,0 +1,124 @@
+<SETG FILERR 1>
+<SETG EOFERR 2>
+<SETG CMDERR 3>
+<SETG ACKERR 4>
+<SETG CLSERR 5>
+<SETG ACKCHR <ASCII 27>>
+
+<MANIFEST FILERR EOFERR CMDERR ACKERR CLSERR>
+
+<SETG ZBUFFER <IBYTES 8 129>>
+<SETG EZBUFFER <IBYTES 8 129>>
+
+<DEFINE ZFTP ("AUX" Z (C <>) (SWAP <>) (ZBUF ,ZBUFFER) (EBUF ,EZBUFFER)
+	            LEN CHR R)
+	#DECL ((Z ZBUF EBUF) BYTES (LEN R) FIX (C) <OR FALSE CHANNEL>
+	       (CHR) <OR FIX CHARACTER> (SWAP) <OR FALSE ATOM>)
+	<PUT ,OUTCHAN 13 150000>
+	<READCHR>
+	<OUTACK>
+	<OUTACK>
+	<REPEAT ()
+		<SET CHR <INCMD>>
+		<COND (<TYPE? .CHR FIX>
+		       <FTPERR .CHR>)
+		      (<==? .CHR !\S>
+		       <SET SWAP T>
+		       <OUTACK>)
+		      (<==? .CHR !\Q>
+		       <QUIT>)
+		      (<OR <==? .CHR !\O> <==? .CHR !\Z> <==? .CHR !\X>>
+		       <COND (<==? .CHR !\O>
+			      <SET C <OR <OPEN "READB" "<ZORK.Z>ZIPTEST.ZIP">
+					 <OPEN "READB"
+					       "<ZORK.ZFTP>ZIPTEST.ZIP">>>)
+			     (<==? .CHR !\X>
+			      <SET C <OPEN "READB" "<ZORK.Z>ZORK0.ZIP">>)
+			     (.SWAP
+			      <SET C <OPEN "READB" "<ZORK.Z>ZORK1S.ZIP">>)
+			     (T
+			      <SET C <OR <OPEN "READB" "<ZORK.Z>ZORK1.ZIP">
+					 <OPEN "READB"
+					       "<ZORK.ZFTP>ZORK1.ZIP">>>)>
+	               <COND (<NOT .C>
+			      <FTPERR ,FILERR>)
+			     (T
+			      <SET Z <GC-READ .C>>
+			      <SET LEN <LENGTH .Z>>
+		              <OUTACK>)>)
+		      (<NOT .C>
+		       <FTPERR ,CLSERR>)
+		      (<MEMQ .CHR "0123456789">
+		       <COND (<G? <SET R <* <- <ASCII .CHR> <ASCII !\0>>
+					    8192>> .LEN>
+			      <FTPERR ,EOFERR>)
+			     (T
+			      <SET Z <REST <TOP .Z> .R>>
+			      <OUTACK>)>)
+		      (<==? .CHR !\T>
+		       <COND (<EMPTY? .Z>
+			      <FTPERR ,EOFERR>
+			      <AGAIN>)>
+		       <SUBSTRUC .EBUF 0 129 .ZBUF>
+		       <SUBSTRUC .Z 0 <MIN 128 <LENGTH .Z>> .ZBUF>
+		       <SET Z <REST .Z <MIN 128 <LENGTH .Z>>>>
+		       <PUT .ZBUF 129 <MOD <+ !.ZBUF> 256>>
+		       <OUTBUF .ZBUF>)
+		      (<==? .CHR !\R>
+		       <OUTBUF .ZBUF>)
+		      (<==? .CHR !\L>
+		       <OUTACK>
+		       <REPEAT ((L .LEN) (N 5))
+			       #DECL ((L N) FIX)
+			       <COND (<0? <SET N <- .N 1>>>
+				      <RETURN>)
+				     (T
+				      <OUTBYTE <MOD .L 256>>
+				      <SET L </ .L 256>>)>>)
+		      (<==? .CHR !\C>
+		       <OUTACK>
+		       <RETURN>)
+		      (<==? .CHR ,ACKERR>
+		       <FTPERR ,ACKERR>)
+		      (T
+		       <FTPERR ,CMDERR>)>>>
+			      
+<DEFINE INCMD ("AUX" CHR)
+	#DECL ((CHR) CHARACTER)
+	<SET CHR <READCHR>>
+	<INACK .CHR>>
+
+<DEFINE INACK (CHR "AUX" (ACK <READCHR>))
+	#DECL ((CHR ACK) CHARACTER)
+	<COND (<==? .ACK ,ACKCHR>
+	       .CHR)
+	      (,ACKERR)>>
+
+<DEFINE OUTBUF (BUF)
+	#DECL ((BUF) BYTES)
+	<OUTACK>
+	<MAPF <> ,OUTBYTE .BUF>>
+
+<DEFINE OUTBYTE (BYTE)
+	#DECL ((BYTE) FIX)
+	<OUTHEX </ .BYTE 16>>
+	<OUTHEX <MOD .BYTE 16>>>
+
+<DEFINE OUTACK ()
+	<PRINC ,ACKCHR>>
+
+<DEFINE FTPERR (NUM)
+	#DECL ((NUM) FIX)
+	<PRIN1 .NUM>
+	<OUTACK>>
+
+<DEFINE OUTHEX (NUM)
+	#DECL ((NUM) FIX)
+	<COND (<G? .NUM 9> <PRINC <ASCII <+ <ASCII !\A> <- .NUM 10>>>>)
+	      (T <PRINC <ASCII <+ <ASCII !\0> .NUM>>>)>>
+
+<DEFINE SAV ()
+	<COND (<=? <SAVE "ZFTP.SAVE"> "SAVED"> T)
+	      (T
+	       <ZFTP>)>>
+	       

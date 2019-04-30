@@ -1,0 +1,534 @@
+<DEFINE I$FCN (FUCN NAME FLAG "OPTIONAL" (FORM '<1>)
+	       		      "AUX" (HATM <>) (SEG <>) ATM ARGL NBIND
+			            (LPROG %<P-I "LPROG ">) (BODY .FUCN)
+				    (FRM <CALL CFRAME>) (ARGS <TUPLE !.FORM>)
+			      "NAME" ACT)
+	#DECL ((FUCN BODY ARGL) LIST (FLAG) <PRIMTYPE WORD> (FRM) T$FRAME
+	       (NAME LPROG) T$ATOM (SEG) STRUCTURED (FORM) <OR FORM TUPLE>
+	       (ATM) ANY (HATM) <OR T$ATOM ADECL FALSE> (NBIND) T$LBIND 
+	       (ARGS) TUPLE (ACT) ACTIVATION)
+	<COND (<TYPE? .FORM TUPLE> <SET ARGS .FORM>)
+	      (T <SET ARGS <REST .ARGS>>)>
+	<COND (<EMPTY? .BODY>
+	       <RETURN <T$ERROR %<P-E "EMPTY-BODY"> .NAME> .ACT>)
+	      (<TYPE? <1 .BODY> T$ATOM ADECL>
+	       <SET HATM <1 .BODY>>
+	       <SET BODY <REST .BODY>>)>
+	<COND (<OR <LENGTH? .BODY 1> <NOT <TYPE? <1 .BODY> LIST>>>
+	       <RETURN <T$ERROR %<P-E "BAD-ARGUMENT-LIST"> .NAME> .ACT>)
+	      (T
+	       <SET ARGL <1 .BODY>>
+	       <SET BODY <REST .BODY>>)>
+	<COND (<==? <ANDB .FLAG <+ ,M$$F-APLY ,M$$F-EVAL>> 0>
+	       <SET FLAG <ORB .FLAG ,M$$F-AUX>>)>
+	<REPEAT (BND TOKEN VAL (FIXUP <>))
+		#DECL ((BND) <OR FALSE T$LBIND> (FIXUP) <OR FALSE ATOM>
+		       (TOKEN VAL) ANY)
+		<COND (<AND <EMPTY? .ARGS> <EMPTY? .SEG> <NOT .FIXUP>>
+		       <CALL FIXBIND>
+		       <SET FIXUP T>)>
+		<COND (<EMPTY? .ARGL> <RETURN>)
+		      (<AND <TYPE? <SET TOKEN <1 .ARGL>> ADECL>
+			    <TYPE? <SET ATM <1 .TOKEN>> T$ATOM>
+			    <N==? <ANDB .FLAG ,M$$F-DECL> 0>>
+		       <COND (<SET BND <M$$LVAL <1 .TOKEN>>>
+			      <PUT .BND ,M$$DECL <2 .TOKEN>>)>)
+		      (<OR <TYPE? .TOKEN T$ATOM ADECL>
+			   <AND <TYPE? .TOKEN LIST>
+				<==? <LENGTH .TOKEN> 2>
+				<TYPE? <1 .TOKEN> T$ATOM ADECL>>
+			   <AND <TYPE? .TOKEN FORM>
+				<==? <LENGTH .TOKEN> 2>
+				<==? <1 .TOKEN> %<P-R "QUOTE">>
+				<TYPE? <2 .TOKEN> T$ATOM>>>
+		       <COND (<TYPE? .TOKEN FORM>
+			      <SET ATM <2 .TOKEN>>)
+			     (<TYPE? .TOKEN LIST>
+			      <SET VAL <T$EVAL <2 .TOKEN>>>
+			      <SET ATM <1 .TOKEN>>)
+			     (T
+			      <SET ATM .TOKEN>
+			      <SET VAL ,M$$UNBOUND>)>
+		       <SET NBIND <CALL BIND>>
+		       <I$SET-ATOM .ATM
+				   .NBIND
+				   <COND (<N==? <ANDB .FLAG ,M$$F-OWN> 0>
+					  <COND (<T$GETPROP .FUCN .ATM>)
+						(T
+						 <T$PUTPROP .FUCN .ATM
+						    <CHTYPE (.VAL) T$DEFER>>
+						 <T$GETPROP .FUCN .ATM>)>)
+					 (<N==? <ANDB .FLAG ,M$$F-AUX> 0>
+					  .VAL)
+					 (<AND <EMPTY? .SEG> <EMPTY? .ARGS>>
+					  <COND (<N==? <ANDB .FLAG ,M$$F-OPT>
+						       0>
+						 .VAL)
+						(T
+						 <RETURN
+						  <T$ERROR
+						   %<P-E "TOO-FEW-ARGUMENTS">
+						   .NAME>
+						  .ACT>)>)
+					 (<AND <EMPTY? .SEG>
+					       <OR <SET VAL <1 .ARGS>> T>
+					       <SET ARGS <REST .ARGS>>
+					       <OR <NOT <TYPE? .VAL SEGMENT>>
+						   <N==? <ANDB .FLAG
+							       ,M$$F-APLY>
+							 0>>>
+					  <COND (<AND <NOT <TYPE? .TOKEN FORM>>
+						      <==? <ANDB .FLAG
+								 ,M$$F-APLY>
+							   0>>
+						 <SET VAL <T$EVAL .VAL>>)>
+					  .VAL)
+					 (T
+					  <COND (<TYPE? .VAL SEGMENT>
+						 <SET
+						  SEG
+						  <T$EVAL
+						   <CHTYPE .VAL FORM>>>)>
+					  <SET VAL <1 .SEG>>
+					  <OR <TYPE? .TOKEN FORM>
+					      <N==? <ANDB .FLAG ,M$$F-APLY>
+						    0>
+					      <SET VAL <T$EVAL .VAL>>>
+					  <SET SEG <REST .SEG>>
+					  .VAL)>
+				   .FIXUP>)
+		      (<AND <=? .TOKEN "BIND">
+		            <==? <ANDB .FLAG <+ ,M$$F-BIND ,M$$F-REPT
+						,M$$F-REPT ,M$$F-FIRST>>
+				 0>
+			    <NOT <LENGTH? .ARGL 1>>
+			    <TYPE? <SET ATM <2 .ARGL>> T$ATOM ADECL>>
+		       <SET NBIND <CALL BIND>>
+		       <I$SET-ATOM .ATM .NBIND <M$$FRM-PREV .FRM> .FIXUP>
+		       <SET ARGL <REST .ARGL>>)
+		      (<AND <MEMBER .TOKEN '["OPT" "OPTIONAL"]>
+		            <==? <ANDB .FLAG <+ ,M$$F-BIND ,M$$F-REPT
+						,M$$F-PROG ,M$$F-AUX
+						,M$$F-DECL>>
+				 0>>
+		       <SET FLAG <ORB .FLAG ,M$$F-OPT>>)
+		      (<AND <OR <AND <MEMBER .TOKEN '["ARGS" "CALL"]>
+			             <==? <ANDB .FLAG <+ ,M$$F-BIND ,M$$F-REPT
+							 ,M$$F-PROG ,M$$F-ARTU
+							 ,M$$F-DECL
+							 ,M$$F-APLY>>
+					  0>>
+				<AND <=? .TOKEN "TUPLE">
+				     <==? <ANDB .FLAG <+ ,M$$F-BIND ,M$$F-REPT
+							 ,M$$F-PROG ,M$$F-ARTU
+							 ,M$$F-DECL>>
+					  0>>>
+		       	    <NOT <LENGTH? .ARGL 1>>
+			    <TYPE? <SET ATM <2 .ARGL>> T$ATOM ADECL>>
+		       	    <SET NBIND <CALL BIND>>
+			    <I$SET-ATOM .ATM
+					.NBIND
+					<COND (<=? .TOKEN "ARGS">
+					       <REST .FORM>)
+					      (<=? .TOKEN "CALL">
+					       .FORM)
+					      (T
+					       <I$FCNTUP .SEG .ARGS .FLAG>)>
+					.FIXUP>
+		       <SET ARGL <REST .ARGL>>
+		       <SET ARGS <REST .ARGS <LENGTH .ARGS>>>
+		       <SET FLAG <ORB .FLAG ,M$$F-ARTU>>)
+		      (<AND <MEMBER .TOKEN '["AUX" "EXTRA"]>
+			    <==? <ANDB .FLAG <+ ,M$$F-BIND ,M$$F-REPT
+						,M$$F-PROG ,M$$F-AUX
+						,M$$F-NAM ,M$$F-DECL>>
+				 0>>
+		       <SET FLAG <ORB .FLAG ,M$$F-AUX>>)
+		      (<AND <MEMBER .TOKEN '["NAME" "ACT"]>
+			    <==? <ANDB .FLAG ,M$$F-NAM> 0>
+			    <NOT <LENGTH? .ARGL 1>>
+			    <TYPE? <SET ATM <2 .ARGL>> T$ATOM ADECL>>
+		       <SET NBIND <CALL BIND>>
+		       <I$SET-ATOM .ATM .NBIND .FRM .FIXUP>
+		       <SET ARGL <REST .ARGL>>)
+		      (<AND <=? .TOKEN "DECL">
+			    <==? <ANDB ,FLAG ,M$$F-DECL> 0>>
+		       <SET FLAG <ORB .FLAG ,M$$F-DECL>>)
+		      (<=? .TOKEN "OWN">
+		       <SET FLAG <ORB .FLAG ,M$$F-OWN>>)
+		      (T
+		       <RETURN <T$ERROR %<P-E "BAD-ARGUMENT-LIST"> .NAME>
+			       .ACT>)>
+		<SET ARGL <REST .ARGL>>>
+	<COND (<AND <N==? <ANDB .FLAG <+ ,M$$F-APLY ,M$$F-EVAL>> 0>
+		    <OR <NOT <EMPTY? .ARGS>>
+			<NOT <EMPTY? .SEG>>>>
+	       <RETURN <T$ERROR %<P-E "TOO-MANY-ARGUMENTS"> .NAME> .ACT>)>
+	<COND (.HATM
+	       <SET NBIND <CALL BIND>>
+	       <I$SET-ATOM .HATM .NBIND .FRM T>)>
+	<COND (<==? <ANDB .FLAG ,M$$F-BIND> 0>
+	       <SET NBIND <CALL BIND>>
+	       <PUT .LPROG
+		    ,M$$LVAL
+		     <PUT <I$LBIND .LPROG .NBIND>
+			  ,M$$VALU
+			  .FRM>>)>
+	<PROG (ANS "NAME" ACT)
+	      #DECL ((ANS) ANY (ACT) ACTIVATION)
+	      <CALL ACTIVATION .FRM .ACT>
+	      <SET ANS <MAPF <> ,T$EVAL .BODY>>
+	      <COND (<N==? <ANDB .FLAG ,M$$F-REPT> 0> <T$AGAIN .FRM>)
+		    (ELSE <T$RETURN .ANS .FRM>)>>>
+
+<SETG M$$DECL-CHECK %<P-R "T">>
+
+<DEFINE I$SET-ATOM (ARG BND VAL "OPTIONAL" (FX T)
+		                "AUX" (DECL %<P-R "ANY">) ATM)
+	#DECL ((ARG) <OR ADECL T$ATOM> (ATM) T$ATOM (BND) T$LBIND (VAL) ANY
+	       (DECL) <OR T$ATOM FORM SEGMENT> (FX) <OR ATOM FALSE>)
+	<COND (<TYPE? .ARG ADECL>
+	       <SET ATM <1 .ARG>>
+	       <COND (<OR <NOT ,M$$DECL-CHECK>
+			  <T$DECL? .VAL <2 .ARG>>
+			  <TYPE? .VAL T$UNBOUND>>
+		      <SET DECL <2 .ARG>>)
+		     (T
+		      <T$ERROR %<P-E "TYPE-MISMATCH">
+			       <1 .ARG>
+			       <2 .ARG>
+			       .VAL
+			       %<P-R "EVAL">>)>)
+	      (T <SET ATM .ARG>)>
+	<M$$VALU <M$$DECL <SET BND <I$LBIND .ATM .BND>> .DECL> .VAL>
+	<COND (.FX <PUT .ATM ,M$$LVAL .BND>)>>
+
+<DEFINE I$FCNTUP (SEG ARGS FLAG "AUX" (APLY? <N==? <ANDB .FLAG ,M$$F-APLY>
+						   0>) (CNT 0))
+	#DECL ((SEG) STRUCTURED (ARGS) TUPLE (CNT) FIX (FLAG) <PRIMTYPE WORD>
+	       (APLY?) <OR ATOM FALSE>)
+	<REPEAT (ARG)
+		#DECL ((ARG) ANY)
+		<COND (<AND <EMPTY? .ARGS> <EMPTY? .SEG>>
+		       <RETURN <CALL TUPLE .CNT>>)
+		      (<EMPTY? .SEG>
+		       <COND (<TYPE? <SET ARG <1 .ARGS>> SEGMENT>
+			      <SET SEG <T$EVAL <CHTYPE .ARG FORM>>>)
+			     (T
+			      <CALL PUSH
+				    <COND (.APLY? .ARG)
+					  (T <T$EVAL .ARG>)>>
+			      <SET CNT <+ .CNT 1>>)>
+		       <SET ARGS <REST .ARGS>>)
+		      (T
+		       <CALL PUSH
+			     <COND (.APLY? <1 .SEG>)
+				   (T <T$EVAL <1 .SEG>>)>>
+		       <SET CNT <+ .CNT 1>>
+		       <SET SEG <REST .SEG>>)>>>
+
+;"Here are the SUBRs themselves."
+
+<DEFINE T$PROG ("ARGS" ARGS) #DECL ((ARGS) LIST)
+	<I$FCN .ARGS %<P-R "PROG"> ,M$$F-PROG>>
+
+<DEFINE T$BIND ("ARGS" ARGS) #DECL ((ARGS) LIST)
+	<I$FCN .ARGS %<P-R "BIND"> ,M$$F-BIND>>
+
+<DEFINE T$REPEAT ("ARGS" ARGS) #DECL ((ARGS) LIST)
+	<I$FCN .ARGS %<P-R "REPEAT"> ,M$$F-REPT>>
+
+<DEFINE T$RETURN ("OPTIONAL" (VAL <T$LOOKUP "T" <T$ROOT>>) FRM)
+	#DECL ((VAL VALUE) ANY (FRM) T$FRAME)
+	<COND (<ASSIGNED? FRM>
+	       <CALL RFRAME .FRM>
+	       <CALL RETURN .VAL>)
+	      (<T$ASSIGNED? %<P-I "LPROG ">>
+               <CALL RFRAME <T$LVAL %<P-I "LPROG">>>
+	       <CALL RETURN .VAL>)
+	      (ELSE <T$ERROR %<P-E "NO-LPROG"> %<P-R "RETURN">>)>>
+
+<DEFINE T$AGAIN ("OPTIONAL" FRM) #DECL ((FRM) T$FRAME (VALUE) ANY)
+	<COND (<ASSIGNED? FRM> <CALL AGAIN .FRM>)
+	      (<T$ASSIGNED? %<P-I "LPROG ">>
+	       <CALL AGAIN <T$LVAL %<P-I "LPROG ">>>)
+	      (ELSE <T$ERROR %<P-E "NO-LPROG"> %<P-R "AGAIN">>)>>
+
+<DEFINE T$APPLY (FCN "TUPLE" ARGS
+		     "AUX" (TYP <CHTYPE <LSH <CALL TYPE .FCN> -6> FIX>)
+		           (ENTRY <NTH ,M$$TYPE-INFO <+ .TYP 1>>)
+			   (ETYP <NTH .ENTRY ,M$$APPLY>) LEN)
+	#DECL ((FCN VALUE) ANY (ARGS) TUPLE (LEN) FIX (ENTRY) T$TYPE-ENTRY
+	       (TYP) FIX (ETYP) <OR T$ATOM T$MSUBR0 APPLICABLE FALSE>)
+	<COND (<==? .ETYP %<P-R "MSUBR">>
+	       <I$MSUBR <CHTYPE .FCN T$MSUBR> %<P-R "APPLY"> .ARGS>)
+	      (<==? .ETYP %<P-R "FUNCTION">>
+	       <I$FCN <CHTYPE .FCN LIST> %<P-R "APPLY"> ,M$$F-APLY .ARGS>)
+	      (<MEMQ .ETYP [%<P-R "FIX"> %<P-R "OFFSET">]>
+	       <COND (<0? <SET LEN <LENGTH .ARGS>>>
+		      <T$ERROR %<P-E "TOO-FEW-ARGUMENTS"> %<P-R "APPLY">>)
+		     (<1? .LEN>
+		      <T$NTH <NTH .ARGS 1> <T$CHTYPE .FCN .ETYP>>)
+		     (<==? .LEN 2>
+		      <T$PUT <NTH .ARGS 1>
+			     <T$CHTYPE .FCN .ETYP>
+			     <NTH .ARGS 2>>)
+		     (ELSE
+		      <T$ERROR %<P-E "TOO-MANY-ARGUMENTS-SUPPLIED">
+			       %<P-R "APPLY">>)>)
+	      (ELSE <T$ERROR %<P-E "NON-APPLICABLE-TYPE"> %<P-R "APPLY">>)>>
+
+ <DEFINE T$EVAL (ARG1 "OPTIONAL" ARG2
+		      "AUX" (OBND <CALL GETS BIND>) FCN ATM VAL LEN (INT? <>)
+			    (ENTRY <NTH ,M$$TYPE-INFO
+					<+ <CHTYPE <LSH <CALL TYPE .ARG1> -6>
+						FIX> 1>>)
+			    (ETYP <NTH .ENTRY ,M$$NEVAL>))
+	#DECL ((ARG1 ATM VAL VALUE IOVAL) ANY (FCN) <OR APPLICABLE ANY>
+	       (ARG2) T$FRAME (OBND) <OR T$LBIND FALSE>
+	       (ETYP) <OR APPLICABLE T$ATOM FALSE> (LEN) FIX
+	       (ENTRY) T$TYPE-ENTRY (INT?) <OR FALSE T$ATOM>)
+	;<COND (<SET INT? <M$$C-ENABLE ,M$$EVALCLASS>>
+	       <T$INTERRUPT "EVAL" %<P-R "EVAL-IN"> .ARG1>)>
+	<COND (<ASSIGNED? ARG2>
+	       <SETG M$$BINDID <+ ,M$$BINDID 1>>
+	       <COND (<N==? .ARG2 ,M$$TBIND>
+		      <CALL SETS BIND <M$$FRM-BIND .ARG2>>)>)>
+	<SET VAL
+	     <COND
+	      (<NOT .ETYP> .ARG1)
+	      (<==? .ETYP %<P-R "VECTOR">>
+	       <CHTYPE <MAPF ,VECTOR
+			     <FUNCTION (ITM) #DECL ((ITM) ANY)
+				  <COND (<TYPE? .ITM SEGMENT>
+					 <MAPRET !<T$EVAL <CHTYPE .ITM FORM>>>)
+					(T <T$EVAL .ITM>)>>
+			     .ARG1>
+		       <TYPE .ARG1>>)
+	      (<==? .ETYP %<P-R "LIST">> <I$LISTEVAL .ARG1>)
+	      (<==? .ETYP <SET ATM %<P-R "LVAL">>>
+	       <T$APPLY <T$GVAL .ATM> <CHTYPE .ARG1 T$ATOM>>)
+	      (<==? .ETYP <SET ATM %<P-R "GVAL">>>
+	       <T$APPLY <T$GVAL .ATM> <CHTYPE .ARG1 T$ATOM>>)
+	      (<AND <==? .ETYP %<P-R "FORM">>
+		    <EMPTY? .ARG1>>
+	       <>)
+	      (<==? .ETYP %<P-R "FORM">>
+	       <SET FCN
+		    <COND (<TYPE? <SET ATM <CALL NTHL .ARG1 1>> T$ATOM>
+		           <T$GVAL .ATM>)
+			  (T <T$EVAL .ATM>)>>
+	       <COND (<TYPE? .FCN FIX OFFSET>
+		      <COND (<1? <SET LEN <CALL LENL .ARG1>>>
+			     <T$ERROR %<P-E "TOO-FEW-ARGUMENTS">
+				      %<P-R "EVAL">>)
+			    (<==? .LEN 2>
+			     <T$NTH <T$EVAL <CALL NTHL .ARG1 2>> .FCN>)
+			    (<==? .LEN 3>
+			     <T$PUT <T$EVAL <CALL NTHL .ARG1 2>>
+				    .FCN
+				    <T$EVAL <CALL NTHL .ARG1 3>>>)
+			    (T
+			     <T$ERROR %<P-E "TOO-MANY-ARGUMENTS">
+				      %<P-R "EVAL">>)>)
+		     (<TYPE? .FCN T$MSUBR>
+		      <I$MSUBR .FCN %<P-R "EVAL"> <CHTYPE .ARG1 FORM>>)
+		     (<TYPE? .FCN T$FUNCTION>
+		      <I$FCN <CHTYPE .FCN LIST>
+			     %<P-R "EVAL">
+			     ,M$$F-EVAL
+			     <CHTYPE .ARG1 FORM>>)
+		     (<NTH .ENTRY ,M$$APPLY>
+		      <T$APPLY .FCN !<REST .ARG1>>)
+		     (<TYPE? .FCN T$MACRO>
+		      <T$EVAL <T$EXPAND .ARG1>>)
+		     (T
+		      <T$ERROR %<P-E "NON-APPLICABLE-TYPE"> %<P-R "EVAL">>)>)
+	      (<==? .ETYP %<P-R "ADECL">>
+	       <COND (<OR <NOT ,M$$DECL-CHECK>
+			  <T$DECL? <SET VAL <T$EVAL <1 .ARG1>>> <2 .ARG1>>>
+		      .VAL)
+		     (T
+		      <T$ERROR %<P-E "DECL-VIOLATION">
+			       .VAL <2 .ARG1> %<P-R "EVAL">>)>)
+	      (<==? .ETYP %<P-R "SEGMENT">>
+	       <T$ERROR %<P-E "ILLEGAL-SEGMENT"> %<P-R "EVAL">>)
+	      (<T$APPLICABLE? .ETYP> <T$APPLY .ETYP .ARG1>)
+	      (ELSE .ARG1)>>
+	<COND (<ASSIGNED? ARG2>
+	       <SETG M$$BINDID <+ ,M$$BINDID 1>>
+	       <COND (<N==? .ARG2 ,M$$TBIND> <CALL SETS BIND .OBND>)>)>
+	;<COND (.INT? <T$INTERRUPT "EVAL" %<P-R "EVAL-OUT"> .ARG1 .VAL>)>
+	.VAL>
+
+<DEFINE I$LISTEVAL (ARG1 "AUX" (L ()) (LL .L) (TYP <TYPE .ARG1>) ITM)
+	#DECL ((ARG1) <PRIMTYPE LIST> (L LL) LIST (TYP) ATOM (ITM) ANY)
+	<REPEAT ()
+		<COND (<EMPTY? .ARG1>
+		       <RETURN <CHTYPE .LL .TYP>>)
+		      (T
+		       <SET ITM <1 .ARG1>>
+		       <SET ARG1 <REST .ARG1>>
+		       <COND (<TYPE? .ITM SEGMENT>
+			      <SET ITM <T$EVAL <CHTYPE .ITM FORM>>>
+			      <COND (<AND <EMPTY? .ARG1>
+					  <==? <PRIMTYPE .ITM> LIST>>
+				     <COND (<EMPTY? .L>
+					    <RETURN <CHTYPE .ITM LIST>>)
+					   (T <PUTREST .L .ITM>)>)
+				    (T
+				     <REPEAT ()
+					 <COND (<EMPTY? .ITM> <RETURN>)
+					       (<EMPTY? .L>
+						<SET LL <SET L (<1 .ITM>)>>)
+					       (T
+						<SET L
+						     <REST
+						        <PUTREST .L
+								 (<1 .ITM>)>>>
+						<SET ITM <REST .ITM>>)>>)>)
+			     (<EMPTY? .L> <SET LL <SET L (<T$EVAL .ITM>)>>)
+			     (T
+			      <SET L <REST <PUTREST .L (<T$EVAL .ITM>)>>>)>)>>>
+
+<DEFINE T$EXPAND (FRM "AUX" (OBIND <CALL GETS BIND>) VAL FROB NFROB)
+	#DECL ((FRM) FORM (OBIND) <OR FALSE T$LBIND>
+	       (FROB NFROB VAL) ANY)
+	<CALL SETS BIND ,M$$TBIND>
+	<COND (<TYPE? <SET FROB <1 .FRM>> T$MACRO>
+	       <PUT .FRM 1 <1 .FROB>>
+	       <SET VAL <T$EVAL .FRM>>
+	       <PUT .FRM 1 .FROB>)
+	      (<AND <TYPE? .FROB T$ATOM>
+		    <TYPE? <SET NFROB <T$GVAL .FROB>> T$MACRO>>
+	       <PUT .FRM 1 <1 .NFROB>>
+	       <SET VAL <T$EVAL .FRM>>
+	       <PUT .FRM 1 .FROB>)
+	      (T <SET VAL <T$EVAL .FRM>>)> 
+	<CALL SETS BIND .OBIND>
+	.VAL>
+
+<DEFINE I$MSUBRF ("TUPLE" TUP "AUX" VAL (MSBN <M$$MSB-NAME .MSB>))
+	#DECL ((TAFLG) <OR ATOM FALSE> (TUP) TUPLE (VAL) ANY (MSB) MSUBR
+	       (MSBN) ATOM)
+	<COND (<AND .TAFLG <NOT <I$MSTUPLE .MSB .TUP>>>)
+	      (<T$DECL? <SET VAL <CALL CALL .MSBN !.TUP>> .VDCL>
+	       .VAL)
+	      (ELSE
+	       <T$ERROR %<P-E "TYPE-MISMATCH">
+			%<P-R "VALUE">
+			.VDCL
+			.VAL
+			.NAME>)>>
+
+<DEFINE I$MSUBR (MSB NAME FORM "AUX" (VDCL %<P-R "ANY">) (SEG ())
+		 		     (OPT <>) (VAL <>) (QUOT <>) (TUP <>)
+				     (DCL <M$$MSB-DECL .MSB>)
+				     (ARGS <TUPLE !.FORM>) ARG (TAFLG <>))
+	#DECL ((MSB) <SPECIAL T$MSUBR> (ARGS) TUPLE (ARG) ANY
+	       (NAME) <SPECIAL T$ATOM> (TAFLG) <SPECIAL <OR ATOM FALSE>>
+	       (SEG) STRUCTURED (OPT VAL QUOT TUP) <OR ATOM FALSE>
+	       (DCL) <PRIMTYPE LIST> (FORM) <OR TUPLE FORM>
+	       (VDCL) <SPECIAL <OR T$ATOM FORM SEGMENT>>)
+	<COND (<TYPE? .FORM TUPLE> <SET ARGS .FORM>)
+	      (T <SET ARGS <REST .ARGS>>)>
+	<MAPR ,I$MSUBRF
+	      <FUNCTION ("AUX" TOKEN)
+		   #DECL ((TOKEN) ANY)
+	           <COND (.TUP <SET TOKEN <>>)
+			 (<EMPTY? .DCL> <MAPSTOP>)
+			 (T
+			  <SET TOKEN <1 .DCL>>
+			  <SET DCL <REST .DCL>>)>
+		   <COND (.VAL <SET VAL <>> <MAPRET>)
+			 (<OR <TYPE? .TOKEN T$ATOM FORM> .TUP>
+			  <COND (<AND <EMPTY? .SEG> <EMPTY? .ARGS>>
+				 <COND (<OR .OPT .TUP> <MAPSTOP>)
+				       (T
+					<T$ERROR %<P-E "TOO-FEW-ARGUMENTS">
+						 .NAME>)>)
+				(<EMPTY? .SEG>
+				 <SET ARG <1 .ARGS>>
+				 <COND (<TYPE? .ARG SEGMENT>
+					<SET SEG <T$EVAL <CHTYPE .ARG FORM>>>
+					<SET ARG <1 .SEG>>
+					<SET SEG <REST .SEG>>)
+				       (T
+					<COND (.QUOT <SET QUOT <>>)
+					      (<==? .NAME %<P-R "APPLY">>)
+					      (T <SET ARG <T$EVAL .ARG>>)>)>
+				 <SET ARGS <REST .ARGS>>)
+				(T
+				 <SET ARG <1 .SEG>>
+				 <SET SEG <REST .SEG>>)>
+			  <COND (<OR .TUP <T$DECL? .ARG .TOKEN>>
+				 .ARG)
+				(T
+				 <T$ERROR %<P-E "ARG-WRONG-TYPE"> .NAME>)>)
+			 (<MEMBER .TOKEN '["OPT" "OPTIONAL"]>
+			  <SET OPT T>
+			  <MAPRET>)
+			 (<=? .TOKEN "VALUE">
+			  <SET VDCL <1 .DCL>>
+			  <SET VAL T>
+			  <MAPRET>)
+			 (<=? .TOKEN "TUPLE">
+			  <SET TUP T>
+			  <SET TAFLG T>
+			  <MAPRET>)
+			 (<=? .TOKEN "QUOTE">
+			  <SET QUOT T>
+			  <MAPRET>)
+			 (<=? .TOKEN "ARGS">
+			  <COND (<T$DECL? <REST .FORM> <1 .DCL>>
+				 <MAPSTOP <REST .FORM>>)
+				(T <T$ERROR %<P-E "ARG-WRONG-TYPE"> .NAME>)>)
+			 (<=? .TOKEN "CALL">
+			  <MAPSTOP .FORM>)
+			 (T <T$ERROR %<P-E "BAD-MSUBR-DECL"> .NAME>)>>>>
+
+<DEFINE I$MSTUPLE (MSB TUP "AUX" (DCL <M$$MSB-DECL .MSB>) TOK)
+	#DECL ((MSB) T$MSUBR (TUP) TUPLE (DCL) <PRIMTYPE LIST>
+	       (TOK) <OR STRING T$ATOM FORM SEGMENT>)
+	<REPEAT ()
+		<COND (<=? <SET TOK <1 .DCL>> "TUPLE">
+		       <COND (<T$DECL? .TUP <2 .DCL>>
+			      <RETURN T>)
+			     (T
+			      <T$ERROR %<P-E "ARG-WRONG-TYPE">
+				       <M$$MSB-NAME .MSB>>
+			      <>)>)
+		      (<NOT <TYPE? .TOK STRING>> <SET TUP <REST .TUP>>)
+		      (<=? .TOK "VALUE"> <SET DCL <REST .DCL>>)>
+		<SET DCL <REST .DCL>>>> 
+
+<DEFINE T$DECL-CHECK ("OPTIONAL" NEW "AUX" (OLD ,M$$DECL-CHECK))
+	#DECL ((NEW OLD) <OR T$ATOM FALSE>)
+	<COND (<ASSIGNED? NEW>
+	       <SETG M$$DECL-CHECK .NEW>)>
+	.OLD>
+
+<DEFINE T$OVAL (ATM FCN "OPTIONAL" SET
+			"AUX" (VAL <T$GETPROP <CHTYPE .FCN LIST> .ATM>))
+	#DECL ((FCN) T$FUNCTION (ATM) T$ATOM (VAL) <OR T$DEFER FALSE>
+	       (SET) ANY)
+	<COND (.VAL
+	       <COND (<ASSIGNED? SET> <PUT .VAL 1 .SET> .SET)
+		     (<TYPE? <1 .VAL> T$UNBOUND>
+		      <T$ERROR %<P-E "UNBOUND-VARIABLE">
+			       .ATM
+			       %<P-R "OWNED-VALUE">>)
+		     (T <1 .VAL>)>)
+	      (<ASSIGNED? SET>
+	       <T$PUTPROP <CHTYPE .FCN LIST> .ATM <CHTYPE (.SET) T$DEFER>>
+	       .SET)
+	      (T <T$ERROR %<P-E "UNOWNED-VARIABLE"> .FCN .ATM>)>>
+
+<DEFINE T$UNOWN (ATM FCN)
+	#DECL ((ATM) T$ATOM (FCN) T$FUNCTION)
+	<T$PUTPROP <CHTYPE .FCN LIST> .ATM <>>
+	%<P-R "T">>
+
+<DEFINE T$OWNED? (ATM FCN)
+	#DECL ((ATM) T$ATOM (FCN) T$FUNCTION)
+	<COND (<T$GETPROP <CHTYPE .FCN LIST> .ATM> %<P-R "T">)>>

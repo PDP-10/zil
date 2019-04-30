@@ -1,0 +1,1407 @@
+
+"ZIL Interpreter/Table Generator"
+
+<SETG INITIAL <GET INITIAL OBLIST>>
+
+<DEFINE MSETG (ATM VAL) <SETG .ATM .VAL> <MANIFEST .ATM>>
+
+<SETG STR3 <ISTRING 3>>
+
+;"***************** OFFSETS INTO 'OBJECTS' ******************"
+
+<MSETG OLOC 1>
+
+<MSETG OFIRST 2>
+
+<MSETG ONEXT 3>
+
+<MSETG ODESC 4>
+
+<MSETG OBIT0-15 5>
+
+<MSETG OBIT16-31 6>
+
+<MSETG OPROP 7>
+
+;"*********************** OBJECT BIT CONSTANTS *****************"
+
+<SETG BITBYTE ,OBIT16-31>
+
+<SETG HIBIT 32>
+
+<SETG HIVAL 0>
+
+<GDECL (BITBYTE HIBIT HIVAL) FIX>
+
+<MSETG BWORD 1>
+
+<MSETG BVAL 2>
+
+<MSETG BNUM 3>
+
+;"******************** VOCABULARY WORD OFFSETS *******************"
+
+<MSETG WTYPES 1>
+
+<MSETG WVAL1 2>
+
+<MSETG WVAL2 3>
+
+<MSETG WSYM 4>
+
+;"******************* VALUES FOR THE WTYPE SLOT ******************"
+
+<SETG TOBJECT ![128 0!]>
+
+<SETG TVERB ![64 1!]>
+
+<SETG TADJ ![32 2!]>
+
+<SETG TDIR ![16 3!]>
+
+<SETG TPREP ![8 0!]>
+
+<SETG TBUZZ ![4 0!]>
+
+<GDECL (TOBJECT TVERB TADJ TDIR TPREP TBUZZ)
+       <UVECTOR FIX FIX>
+       (WTYPETBL)
+       <UVECTOR [REST ATOM]>>
+
+<SETG WTYPETBL ![OBJECT VERB ADJECTIVE DIRECTION PREPOSITION BUZZ-WORD!]>
+
+;"******************** PARTS OF SPEECH TABLES **********************"
+
+<SETG PROPS <REST <IUVECTOR 31 T> 30>>
+
+<SETG ADJS <REST <IUVECTOR 255 T> 254>>
+
+<SETG PREPS <REST <IUVECTOR 255 T> 254>>
+
+<SETG BUZZES <REST <IUVECTOR 255 T> 254>>
+
+<SETG ACTS <REST <IUVECTOR 255 T> 254>>
+
+<SETG PROPDEFS <IVECTOR 31 <>>>
+
+<GDECL (PROPS ADJS BUZZES PREPS)
+       <UVECTOR [REST ATOM]>
+       (PROPDEFS)
+       VECTOR>
+
+;"************************* OBLIST DEFINITIONS ********************"
+
+<SETG OBJECTS <MOBLIST OBJECTS 17>>
+
+<SETG ZOBJS <MOBLIST ZOBJS 17>>
+
+<SETG FLAGS <MOBLIST FLAGS 17>>
+
+<SETG VERBOBL <MOBLIST VERBOBL 17>>
+
+<SETG WORDS <MOBLIST WORDS 17>>
+
+<SETG VOCABULARY <MOBLIST VOCABULARY 53>>
+
+<GDECL (OBJECTS FLAGS WORDS VERBOBL) OBLIST>
+
+;"************************* ZILCH PSEUDO OPERATIONS ******************"
+
+<SETG ID ,TIME>
+
+<SETG ENDLOAD ,TIME>
+
+;"PROPDEF - Set property defaults"
+
+<DEFINE PROPDEF (NAME VAL)
+	#DECL ((NAME) ATOM (VAL) <OR ATOM FIX>)
+	<PUT ,PROPDEFS <POS .NAME <TOP ,PROPS>> .VAL>>
+
+;"ITABLE - Create a long empty table"
+
+<DEFINE ITABLE (LEN? LEN "OPTIONAL" (FILL 0) "AUX" L)
+	#DECL ((LEN?) ATOM (LEN FILL) FIX (L) <VECTOR [REST ZOBJECT]>)
+	<SET L <IVECTOR .LEN .FILL>>
+	<OR <==? .LEN? NONE>
+	    <PUT .L 1 .LEN>>
+	<COND (<==? .LEN? WORD>
+	       <PUT .L 2 <CHTYPE (.LEN) FALSE>>)>
+	<CHTYPE .L TABLE>>
+
+;"TABLE - Create arbitrary tables"
+
+<DEFINE LTABLE ("TUPLE" ELEM)
+	#DECL ((ELEM) TUPLE)
+	<TABLE <LENGTH .ELEM> !.ELEM>>
+
+<DEFINE TABLE ("TUPLE" ELEM)
+	#DECL ((ELEM) <TUPLE [REST <OR ZOBJECT <FALSE ZOBJECT>>]>)
+	<CHTYPE <MAPF ,VECTOR
+		      <FUNCTION (EL)
+				#DECL ((EL) <OR ZOBJECT <FALSE ZOBJECT>>)
+				<COND (<AND <TYPE? .EL ATOM>
+					    <GASSIGNED? .EL>
+					    <TYPE? ,.EL OBJECT FIX TABLE>>
+				       <SET EL ,.EL>)>
+				<MAPRET .EL <CHTYPE (.EL) FALSE>>>
+		      .ELEM>
+		TABLE>>
+
+;"DIRECTIONS - Create direction properties"
+
+<DEFINE DIRECTIONS ("TUPLE" NAMES)
+	#DECL ((NAMES) <TUPLE [REST ATOM]>)
+	<MAPF <>
+	      <FUNCTION (NAME)
+			#DECL ((NAME) ATOM)
+			<ADD-SEQ .NAME PROPS "P?">>
+	      .NAMES>
+	<PRINT-SEQ <TOP ,PROPS> "P?">
+	<GLOBAL LOW-DIRECTION <POS <NTH .NAMES <LENGTH .NAMES>> <TOP ,PROPS>>>>
+
+;" SYNTAX - Create syntax tables for the parser"
+
+<DEFINE SYNTAX ("TUPLE" ARGS
+		"AUX" ANY VERB (ACT <>) ATM (PREP 0) (POS 0) (SLOTS ,SLOTS)
+		      SLOT L (PREACT <>))
+   #DECL ((ARGS) TUPLE (ANY) ANY (VERB) ATOM (ACT ATM) <OR FALSE ATOM>
+	  (POS PREP) FIX (SLOT) <UVECTOR [3 FIX]> (L) <LIST [REST VECTOR]>
+	  (SLOTS) <UVECTOR [REST <UVECTOR [3 FIX]>]>)
+   <MAPR <> <FUNCTION (X) #DECL ((X) UVECTOR) <PUT .X 1 0>> <1 .SLOTS>>
+   <MAPR <> <FUNCTION (X) #DECL ((X) UVECTOR) <PUT .X 1 0>> <2 .SLOTS>>
+   <COND
+    (<EMPTY? .ARGS> <COMPERR TOO-FEW-ARGUMENTS!-ERRORS SYNTAX>)
+    (<TYPE? <SET ANY <1 .ARGS>> ATOM>
+     <SET VERB <1 .ARGS>>
+     <MAPR <>
+      <FUNCTION (TUP "AUX" (ITM <1 .TUP>)) 
+	      #DECL ((ITM) ANY)
+	      <COND (<==? .ITM OBJECT>
+		     <COND (<G? <SET POS <+ .POS 1>> 2>
+			    <COMPERR TOO-MANY-OBJECTS!-ERRORS SYNTAX>)>
+		     <SET SLOT <NTH .SLOTS .POS>>
+		     <PUT .SLOT 1 .PREP>
+		     <SET PREP 0>)
+		    (<==? .ITM =>
+		     <COND (<OR <LENGTH? .TUP 1> <NOT <TYPE? <2 .TUP> ATOM>>>
+			    <COMPERR BAD-SYNTAX!-ERRORS SYNTAX>)
+			   (<SET ACT <2 .TUP>>
+			    <OR <LENGTH? .TUP 2>
+				<SET PREACT <3 .TUP>>>
+			     <MAPLEAVE>)>)
+		    (<TYPE? .ITM ATOM>
+		     <SET PREP <ADD-SEQ .ITM PREPS>>
+		     <ADD-WORD .ITM TPREP .PREP T>)
+		    (<AND <TYPE? .ITM LIST>
+			  <NOT <EMPTY? .ITM>>
+			  <TYPE? <SET ANY <1 .ITM>> ATOM>>
+		     <COND (<==? .ANY FIND>
+			    <AND <OR <LENGTH? .ITM 1>
+				     <NOT <TYPE? <2 .ITM> ATOM>>>
+				 <COMPERR BAD-SYNTAX!-ERRORS SYNTAX>>
+			    <BITADD ,PHONYBIT <SET ATM <2 .ITM>>>
+			    <PUT .SLOT 2 <3 ,<LOOKUP <SPNAME .ATM> ,FLAGS>>>)
+			   (<SBITS .ITM .SLOT>)>)
+		    (<ERROR BAD-SYNTAX!-ERRORS SYNTAX>)>>
+      <REST .ARGS>>
+     <COND
+      (.ACT
+       <SET L
+	    <COND (<SET ATM <LOOKUP <SPNAME .VERB> ,VERBOBL>> ,.ATM)
+		  (<SET ATM <INSERT <SPNAME .VERB> ,VERBOBL>> ())>>
+       <SETG .ATM
+	([.POS
+	  <1 <1 .SLOTS>>
+	  <1 <2 .SLOTS>>
+	  <2 <1 .SLOTS>>
+	  <2 <2 .SLOTS>>
+	  <3 <1 .SLOTS>>
+	  <3 <2 .SLOTS>>
+	  <- <GET-ACTION .ACT .PREACT> 2>]
+	 !.L)>)
+      (<COMPERR NO-ACTION-SPECIFIED!-ERRORS SYNTAX>)>)
+    (<COMPERR NON-ATOMIC-VERB!-ERRORS SYNTAX .VERB>)>>
+
+;"CONSTANT - Set up arbitrary constants"
+
+<SETG CONSTANT ,SETG>
+
+;"GLOBAL - Set a global variable (at top level)"
+
+<SETG GLOBAL ,SETG>
+
+;"INSERT-FILE - Start compiling from an insert file"
+
+<DEFINE INSERT-FILE (STR "OPTIONAL" (FLOAD? <>))
+        #DECL ((STR) STRING (FLOAD?) <OR ATOM FALSE>)
+	<ZFLOAD .STR .FLOAD?>>
+
+;"BUZZ - Create a buzz-word"
+
+<DEFINE BUZZ ("TUPLE" WRDS) 
+	#DECL ((WRDS) <TUPLE [REST ATOM]>)
+	<MAPF <>
+	      <FUNCTION (WRD) 
+		      #DECL ((WRD) ATOM)
+		      <ADD-WORD .WRD TBUZZ <ADD-SEQ .WRD BUZZES "B?"> T>>
+	      .WRDS>>
+
+<DEFINE ROUTINE ("ARGS" L)
+	<SETG <1 .L> <CHTYPE (\ ZACT!-ZO !<REST .L>) FUNCTION>>>
+
+;"SYNONYM - Create synonyms for a given vocabulary word"
+
+<SETG SYNLIST ()>
+
+<DEFINE SYNONYM ("ARGS" FOO)
+	<SETG SYNLIST (<FORM OSYNONYM !.FOO> !,SYNLIST)>>
+
+<DEFINE OSYNONYM (WRD "TUPLE" SYNS "AUX" WRDVAL ATM) 
+	#DECL ((WRD) ATOM (SYNS) <TUPLE [REST ATOM]> (WRDVAL) VECTOR
+	       (ATM) ATOM)
+	<SET ATM <GET-ATOM .WRD ,WORDS>>
+	<SET WRDVAL <COND (<GASSIGNED? .ATM>
+			   <VECTOR !,.ATM>)
+			  (<SETG .ATM [0 0 0 0]>)>>
+	<MAPF <>
+	      <FUNCTION (WRD) 
+		      #DECL ((WRD) ATOM)
+		      <SETG <GET-ATOM .WRD ,WORDS> .WRDVAL>>
+	      .SYNS>>
+
+;"OBJECT - Create an 'object'"
+
+<DEFINE OBJECT (NAME
+		"TUPLE" DECLS
+		"AUX" (L ()) (MEVEC <ADD-OBJ .NAME>) VEC CONT V)
+   #DECL ((NAME CONT) ATOM (DECLS) <TUPLE [REST LIST]> (L) LIST (FLAGS) FIX
+	  (MEVEC VEC) <VECTOR <OR ATOM FIX> <OR ATOM FIX>> (V) VECTOR)
+   <SETG .NAME <GET-OBJ .NAME>>
+   <MAPF <>
+    <FUNCTION (DECL "AUX" (TYPE <1 .DECL>)) 
+	    <COND
+	     (<==? .TYPE FLAGS>
+	      <MAPF <>
+		    <FUNCTION (BITNAME) <BITADD .MEVEC .BITNAME>>
+		    <REST .DECL>>)
+	     (<==? .TYPE DESC> <PUT .MEVEC ,ODESC <2 .DECL>>)
+	     (<==? .TYPE GLOBAL>
+	      <ADD-SEQ GLOBAL PROPS "P?">
+	      <SET L
+		   (GLOBAL
+		    <- <LENGTH .DECL> 1>
+		    <CHTYPE <MAPF ,VECTOR
+				  <FUNCTION (WRD)
+					    #DECL ((WRD) ATOM)
+					    <ADD-OBJ .WRD>
+					    <GET-OBJ .WRD>>
+				  <REST .DECL>>
+			    TABLE>
+		    !.L)>)
+	     (<==? .TYPE SYNONYM>
+	      <ADD-SEQ SYNONYM PROPS "P?">
+	      <AND <G? <LENGTH .DECL> 5>
+		   <COMPERR TOO-MANY-SYNONYMS!-ERRORS .NAME>>
+	      <SET L
+		   (SYNONYM
+		    <* 2 <LENGTH <REST .DECL>>>
+		    <CHTYPE <MAPF ,VECTOR
+				  <FUNCTION (WRD) 
+					    #DECL ((WRD) ATOM)
+					    <ADD-WORD .WRD TOBJECT 1 T>
+					    <STRING "W?" <SPNAME .WRD>>>
+				  <REST .DECL>>
+			    TABLE>
+		    !.L)>)
+	     (<==? .TYPE ADJECTIVE>
+	      <ADD-SEQ ADJECTIVE PROPS "P?">
+	      <AND <G? <LENGTH .DECL> 9>
+		   <COMPERR TOO-MANY-ADJECTIVES!-ERRORS .NAME>>
+	      <SET L
+		   (ADJECTIVE
+		    <LENGTH <REST .DECL>>
+		    <CHTYPE <MAPF ,VECTOR
+				  <FUNCTION (WRD) 
+					    #DECL ((WRD) ATOM)
+					    <ADD-WORD .WRD
+						      TADJ
+						      <ADD-SEQ .WRD ADJS "A?">>
+					    <STRING "A?" <SPNAME .WRD>>>
+				  <REST .DECL>> TABLE>
+		    !.L)>)
+	     (<==? .TYPE PSEUDO>
+	      <ADD-SEQ PSEUDO PROPS "P?">
+	      <SET L
+		   (PSEUDO
+		    <* <LENGTH <REST .DECL>> 2>
+		    <CHTYPE <MAPF ,VECTOR
+				  <FUNCTION (WRD) 
+					    #DECL ((WRD) <OR STRING ATOM>)
+					    <COND (<TYPE? .WRD STRING>
+						   <ADD-WORD <PARSE .WRD>
+							     TOBJECT 1 T>
+						   <STRING "W?" .WRD>)
+						  (.WRD)>>
+				  <REST .DECL>> TABLE>
+		    !.L)>)
+	     (<AND <==? .TYPE IN>
+		   <N==? <2 .DECL> TO>>
+	      <SET CONT <2 .DECL>>
+	      <PUT .MEVEC ,OLOC .CONT>
+	      <SET VEC <ADD-OBJ .CONT>>
+	      <COND (<==? <OFIRST .VEC> 0> <PUT .VEC ,OFIRST .NAME>)
+		    (<SET VEC <ADD-OBJ <OFIRST .VEC>>>
+		     <PUT .MEVEC ,ONEXT <ONEXT .VEC>>
+		     <PUT .VEC ,ONEXT .NAME>)>)
+	     (T
+	      <ADD-SEQ .TYPE PROPS "P?">
+	      <SET L (.TYPE !<ZPROP <REST .DECL> .TYPE> !.L)>)>>
+    .DECLS>
+   <SET V <VECTOR !.L>>
+   <PUT .MEVEC ,OPROP .V>
+   T>
+
+<SETG ROOM ,OBJECT>
+
+;"******************** FORMAT UTILITIES ********************"
+
+<DEFINE POS (ATM UVEC "AUX" M) 
+	#DECL ((ATM) ATOM (UVEC) <UVECTOR [REST ATOM]>
+	       (M) <OR FALSE <UVECTOR [REST ATOM]>>)
+	<COND (<SET M <MEMQ .ATM .UVEC>> <- <LENGTH .UVEC> <LENGTH .M> -1>)>>
+
+<DEFINE ZPROP (LST PROP "AUX" (ITEM <1 .LST>) (LEN <LENGTH .LST>) RM OBJ/FLG
+			      TEMP) 
+   #DECL ((LST) LIST (ITEM TEMP) ANY (LEN) FIX (PROP RM OBJ/FLG) ATOM)
+   <COND
+    (<AND <==? .ITEM PER> <==? .LEN 2>>
+     <ADD-DIR .PROP>
+     [3 <CHTYPE [<2 .LST> <CHTYPE (<2 .LST>) FALSE> 0] TABLE>])
+    (<AND <=? .ITEM TO> <NOT <LENGTH? .LST 1>>>
+     <ADD-DIR .PROP>
+     <SET RM <2 .LST>>
+     <COND
+      (<LENGTH? .LST 2>
+       [1 <CHTYPE [<GET-OBJ .RM>] TABLE>])
+      (<N==? <3 .LST> IF> <COMPERR BAD-SYNTAX-IN-OBJECT-DEFINITION!-ERRORS>)
+      (<NOT <LENGTH? .LST 3>>
+       <SET OBJ/FLG <4 .LST>>
+       <COND
+	(<AND <G=? .LEN 6> <==? <5 .LST> IS> <==? <6 .LST> OPEN>>
+	 <SET TEMP <COND (<AND <==? .LEN 8> <==? <7 .LST> ELSE>>
+			  <8 .LST>)>>
+	 [5 <CHTYPE [<GET-OBJ .RM>
+		     <GET-OBJ .OBJ/FLG>
+		     .TEMP
+		     <CHTYPE (.TEMP) FALSE>
+		     0] TABLE>])
+	([4
+	  <CHTYPE [<GET-OBJ .RM>
+	  	   .OBJ/FLG
+		   !<COND (<AND <==? .LEN 6>
+				<==? <5 .LST> ELSE>
+				<TYPE? <6 .LST> STRING>>
+			   [<6 .LST> <CHTYPE (<6 .LST>) FALSE>])
+			  (<==? .LEN 4>
+			   [#FALSE () #FALSE (#FALSE ())])
+			  (<COMPERR BAD-SYNTAX-IN-OBJECT-DEFINITION!-ERRORS>)>]
+		  TABLE>])>)
+      (<COMPERR BAD-SYNTAX-IN-OBJECT-DEFINITION!-ERRORS>)>)
+    (<TYPE? .ITEM STRING FIX ATOM TABLE>
+     [2 <CHTYPE [.ITEM <CHTYPE (.ITEM) FALSE>] TABLE>])
+    (<ERROR UNKNOWN-PROPERTY-TYPE!-ERRORS .ITEM>)>>
+
+<DEFINE ADD-DIR (NAM)
+	#DECL ((NAM) ATOM)
+	<ADD-WORD .NAM TDIR <ADD-SEQ .NAM PROPS "P?">>>
+
+<DEFINE BITADD (VEC NAME "AUX" ATM BIT) 
+	#DECL ((VEC) VECTOR (NAME ATM) ATOM (BIT) <VECTOR FIX FIX>)
+	<SET ATM <GET-ATOM .NAME ,FLAGS>>
+	<SET BIT
+	     <COND (<GASSIGNED? .ATM> ,.ATM)
+		   (<SETG HIBIT <- ,HIBIT 1>>
+		    <SETG HIVAL <COND (<0? ,HIVAL> 1) (<* ,HIVAL 2>)>>
+		    <COND (<G? ,HIVAL 35000>
+			   <COND (<==? ,BITBYTE ,OBIT16-31>
+				  <SETG BITBYTE ,OBIT0-15>
+				  <SETG HIVAL 1>)
+				 (<COMPERR TOO-MANY-BITS!-ERRORS>)>)>
+		    <SETG .ATM [,BITBYTE ,HIVAL ,HIBIT]>)>>
+	<PUT .VEC <BWORD .BIT> (.NAME !<NTH .VEC <BWORD .BIT>>)>>
+
+<DEFINE ADD-OBJ (NAME "AUX" ATM) 
+	#DECL ((NAME ATM) ATOM)
+	<SET ATM <GET-ATOM .NAME ,OBJECTS>>
+	<COND (<GASSIGNED? .ATM> ,.ATM) (<SETG .ATM [0 0 0 "" () () []]>)>>
+
+<DEFINE GET-ATOM (NAME OBL) 
+	#DECL ((NAME) ATOM (OBL) OBLIST)
+	<OR <LOOKUP <SPNAME .NAME> .OBL> <INSERT <SPNAME .NAME> .OBL>>>
+
+<DEFINE ADD-WORD (NAME TYPE VALUE
+		  "OPTIONAL" (SYM <>)
+		  "AUX" ATM VEC (TYPVAL ,.TYPE) TYPES)
+	#DECL ((NAME TYPE ATM) ATOM (VALUE) ANY (VEC) VECTOR
+	       (TYPVAL) <UVECTOR [REST FIX]> (SYM) <OR ATOM FALSE>
+	       (TYPES) <PRIMTYPE WORD>)
+	<SET ATM <GET-ATOM .NAME ,WORDS>>
+	<SET VEC <COND (<GASSIGNED? .ATM> ,.ATM) (<SETG .ATM [0 0 0 0]>)>>
+	<AND .SYM <PUT .VEC ,WSYM -1>>
+	<COND (<N==? 0 <CHTYPE <ANDB <SET TYPES <WTYPES .VEC>> <1 .TYPVAL>>
+				FIX>>)
+	      (<==? <WVAL1 .VEC> 0>
+	       <PUT .VEC
+		    ,WTYPES
+		    <CHTYPE <ORB .TYPES <+ <1 .TYPVAL> <2 .TYPVAL>>> FIX>>
+	       <PUT .VEC ,WVAL1 .VALUE>)
+	      (<==? <WVAL2 .VEC> 0>
+	       <PUT .VEC ,WTYPES <CHTYPE <ORB .TYPES <1 .TYPVAL>> FIX>>
+	       <PUT .VEC ,WVAL2 .VALUE>)
+	      (<COMPERR TOO-MANY-PARTS-OF-SPEECH!-ERRORS .NAME>)>>
+
+<DEFINE ADD-SEQ (NAME VECNAME
+		 "OPTIONAL" (STRVAL <>)
+		 "AUX" (VEC ,.VECNAME) (TVEC <TOP .VEC>) VAL)
+	#DECL ((NAME VECNAME) ATOM (VEC TVEC) <UVECTOR [REST ATOM]>
+	       (STRVAL) <OR FALSE STRING> (VAL) <OR FIX FALSE>)
+	<COND (<==? .NAME \,>
+	       <SET NAME COMMA>)
+	      (<==? .NAME \">
+	       <SET NAME QUOTE>)>
+	<COND (<SET VAL <POS .NAME .TVEC>>
+	       <COND (.STRVAL <STRING .STRVAL <SPNAME .NAME>>) (.VAL)>)
+	      (<PUT .VEC 1 .NAME>
+	       <COND (<==? .TVEC .VEC> <COMPERR TOO-MANY!-ERRORS .VECNAME>)
+		     (<SETG .VECNAME <BACK .VEC>>)>
+	       <COND (.STRVAL <STRING .STRVAL <SPNAME .NAME>>)
+		     (<SET VAL <POS .NAME .TVEC>>
+		      <SETG .NAME .VAL>
+		      .VAL)>)>>
+
+;"********************* ZILCH DATA OUTPUT ROUTINES ******************"
+
+
+<SETG SLOTS ![![0 0 0!] ![0 0 0!]!]>
+
+<SETG PHONYBIT [0 0 0 0 () ()]>
+
+<SETG PREACTION (T)>
+
+<SETG PREAL ,PREACTION>
+
+<SETG ACTION (T)>
+
+<SETG AL ,ACTION>
+
+<GDECL (ACTION AL) <LIST [REST ATOM]>
+       (PREAL PREACTION) <LIST [REST <OR FALSE ATOM>]>>
+
+<GDECL (TEMPS) <LIST [REST LOCAL]>>
+
+<DEFINE GET-ACTION (ACT PREACT)
+	#DECL ((ACT) ATOM (PREACT) <OR FALSE ATOM>)
+	<COND (<LPOS .ACT ,ACTION>)
+	      (T
+	       <SETG AL <REST <PUTREST ,AL (.ACT)>>>
+	       <SETG PREAL <REST <PUTREST ,PREAL (.PREACT)>>>
+	       <LPOS .ACT ,ACTION>)>>
+
+<DEFINE LPOS (ITM LST "AUX" M)
+	#DECL ((ITM) ATOM (LST) <LIST [REST ATOM]> (M) <OR FALSE LIST>)
+	<AND <SET M <MEMQ .ITM .LST>>
+	     <- <LENGTH .LST> <LENGTH .M> -1>>>
+	      
+
+<DEFINE SBITS (LST SLOT "AUX" M) 
+   #DECL ((LST) LIST (SLOT) <UVECTOR [REST FIX]>
+	  (M) <OR FALSE <VECTOR [REST ATOM FIX]>>)
+   <MAPF <>
+    <FUNCTION (ANY) 
+	    #DECL ((ANY) ANY)
+	    <COND (<TYPE? .ANY ATOM>
+		   <COND (<SET M <MEMQ .ANY ,SFLAGS>>
+			  <PUT .SLOT 3 <+ <3 .SLOT> <2 .M>>>)
+			 (<COMPERR UNKNOWN-SYNTAX-FLAG!-ERRORS .ANY>)>)
+		  (<COMPERR BAD-SYNTAX!-ERRORS SYNTAX>)>>
+    .LST>>
+
+<MSETG SH 128>
+
+<MSETG SC 64>
+
+<MSETG SIR 32>
+
+<MSETG SOG 16>
+
+<MSETG STAKE 8>
+
+<MSETG SMANY 4>
+
+<MSETG SHAVE 2>
+
+<SETG SFLAGS
+      [HAVE
+       ,SHAVE
+       TAKE
+       ,STAKE
+       MANY
+       ,SMANY
+       HELD
+       ,SH
+       CARRIED
+       ,SC
+       IN-ROOM
+       ,SIR
+       ON-GROUND
+       ,SOG]>
+
+<GDECL (SFLAGS) <VECTOR [REST ATOM FIX]>>
+
+<DEFINE PRINT-VERBNUMS ("AUX" (N -1)) 
+	#DECL ((N) FIX)
+	<MAPF <>
+	      <FUNCTION (ATM "AUX" (S <SPNAME .ATM>)) 
+		      #DECL ((ATM) ATOM (S) STRING)
+		      <COND (<AND <==? <1 .S> !\V>
+				  <==? <2 .S> !\->>
+			     <SET S <REST .S 2>>)>
+		      <IATOM <STRING "V?" .S> <SET N <+ .N 1>>>>
+	      <REST ,ACTION>>
+	<MAPF <>
+	      <FUNCTION (BUCK) 
+		      #DECL ((BUCK) LIST)
+		      <MAPF <>
+			    <FUNCTION (ATM) 
+				    #DECL ((ATM) ATOM)
+				    <ADD-WORD .ATM
+					      TVERB
+					      <ADD-SEQ .ATM ACTS "ACT?">>>
+			    .BUCK>>
+	      ,VERBOBL>>
+
+<DEFINE PRINT-VERBS ("AUX" FOO) 
+	#DECL ((FOO) LIST)
+	<SET FOO
+	      <MAPF ,LIST
+		    <FUNCTION (X)
+			      #DECL ((X) <LIST [REST ATOM]>)
+			      <MAPRET !.X>>
+		    ,VERBOBL>>
+	<SETG VERBS
+	      <MAPF ,TABLE
+		    <FUNCTION (ATM "AUX" X)
+			      #DECL ((ATM) ATOM (X) TABLE)
+			      <SET X <SYNTAB ,.ATM>>
+			      <REMOVE <GUNASSIGN .ATM>>
+			      .X>
+		    .FOO>>>
+
+<DEFINE SYNTAB (LST) 
+	#DECL ((LST) LIST)
+	<CHTYPE <VECTOR <LENGTH .LST>
+			!<MAPF ,LIST <FUNCTION (V) <MAPRET !.V>> .LST>
+			0>
+		TABLE>>
+
+<DEFINE PRINT-ACTIONS ()
+	<SETG ACTIONS <TABLE !<REST ,ACTION>>>
+	<SETG PREACTIONS <TABLE !<REST ,PREACTION>>>>
+
+<DEFINE PRINT-PREPS ()
+	<SETG PREPOSITIONS
+	      <TABLE <LENGTH <REST ,PREPS>>
+		     !<MAPF ,LIST
+			    <FUNCTION (ATM)
+				  <MAPRET ,<LOOKUP <STRING "W?" <SPNAME .ATM>>
+						   ,INITIAL>
+					  ,<LOOKUP <STRING "PR?" <SPNAME .ATM>>
+						   ,INITIAL>>>
+			    <REST ,PREPS>>>>>
+	
+<DEFINE PRINT-VOCAB ("AUX" (OUTCHAN .OUTCHAN) (VOCAB ,VOCABULARY)) 
+	#DECL ((OUTCHAN) CHANNEL (VOCAB) OBLIST)
+	<EVAL ,SYNLIST>
+	<MAPF <>
+	    <FUNCTION (BUCK)
+		 #DECL ((BUCK) LIST)
+		 <MAPF <>
+		     <FUNCTION (WRD "AUX" (VAL ,.WRD) (SPN <SPNAME .WRD>) 
+					  W X V A) 
+			  #DECL ((WRD) ATOM (VAL) VECTOR (W) ZWORD (X) FALSE
+				 (V) TABLE (A) <OR ATOM FALSE> (SPN) STRING)
+			  <SET SPN
+			       <COND (<L=? <LENGTH .SPN> 6>
+				      .SPN)
+				     (<SUBSTRUC .SPN 0 6>)>>
+			  <SETG <OR <AND <SET A <LOOKUP .SPN .VOCAB>>
+					 <PRINC "
+Already there: ">
+					 <PRINC .A>
+					 .A>
+				    <INSERT .SPN .VOCAB>>
+				<SET V
+				     <CHTYPE <VECTOR <SET W
+							  <CHTYPE .SPN ZWORD>>
+						     <SET X
+							  <CHTYPE (.W) FALSE>>
+						     .X
+						     .X
+						     <WTYPES .VAL>
+						     <WX <WVAL1 .VAL>>
+						     <WX <WVAL2 .VAL>>>
+					     TABLE>>>
+			  <IATOM <STRING "W?"
+					 <COND (<=? <SPNAME .WRD> "\"">
+						"QUOTE")
+					       (<=? <SPNAME .WRD> ",">
+						"COMMA")
+					       (<SPNAME .WRD>)>> .V>
+			  <REMOVE <GUNASSIGN .WRD>>>
+		     .BUCK>>
+	    ,WORDS>>
+
+<DEFINE WX (ITM)
+	#DECL ((ITM) <OR FIX STRING>)
+	<COND (<TYPE? .ITM STRING>
+	       ,<LOOKUP .ITM <GET INITIAL OBLIST>>)
+	      (.ITM)>>
+
+<DEFINE IATOM (STR VAL)
+	<SETG <OR <LOOKUP .STR ,INITIAL>
+		  <INSERT .STR ,INITIAL>>
+	      .VAL>>
+
+<DEFINE PRINT-OBJECTS ("AUX" (OBJ ,OBJECTS)) 
+	#DECL ((OBJ) OBLIST)
+	<MAPF <>
+	      <FUNCTION (VAL PROP)
+			#DECL ((VAL) ANY (PROP) ATOM)
+			<COND (<==? .PROP T>)
+			      (<PUT .PROP DEFAULT .VAL>)>>
+	      ,PROPDEFS
+	      <TOP ,PROPS>>
+	<MAPF <>
+	      <FUNCTION (BUCK)
+			#DECL ((BUCK) LIST)
+			<MAPF <> ,OBJMAKE .BUCK>>
+	      .OBJ>>
+
+<DEFINE PRINT-FLAGS () 
+	<MAPF <>
+	      <FUNCTION (BUCK) 
+		      #DECL ((BUCK) <LIST [REST ATOM]>)
+		      <MAPF <>
+			    <FUNCTION (FLAG) 
+				    #DECL ((FLAG) ATOM)
+				    <IATOM <SPNAME .FLAG>
+					   <BNUM ,.FLAG>>
+				    <PUT <BNUM ,.FLAG>
+					 FLAGNAME
+					 <LOOKUP <SPNAME .FLAG> ,INITIAL>>>
+			    .BUCK>>
+	      ,FLAGS>>
+
+<MSETG OBJNAME 1>
+
+<MSETG OBJBITS 2>
+
+<MSETG OBJLOC 3>
+
+<MSETG OBJNEXT 4>
+
+<MSETG OBJFIRST 5>
+
+<MSETG OBJTBL 6>
+
+<DEFINE GET-OBJ (NAME "AUX" ATM) 
+	#DECL ((NAME) ATOM (ATM) <OR FALSE ATOM>)
+	<COND (<SET ATM <LOOKUP <SPNAME .NAME> ,ZOBJS>> ,.ATM)
+	      (<SETG <INSERT <SPNAME .NAME> ,ZOBJS>
+		     <CHTYPE <VECTOR .NAME () <> <> <> ,NT> OBJECT>>)>>
+
+<SETG NT ["FOO" []]>
+
+<DEFINE OBJMAKE (NAME "AUX" (VEC <ADD-OBJ .NAME>) OBJ PROPS M) 
+	#DECL ((NAME) ATOM (VEC) VECTOR (OBJ) OBJECT
+	       (PROPS) <VECTOR [REST ATOM FIX TABLE]>
+	       (M) <OR FALSE <VECTOR ATOM FIX TABLE [REST ANY]>>)
+	<SET OBJ <GET-OBJ .NAME>>
+	<PUT .OBJ ,OBJNAME .NAME>
+	<PUT .OBJ ,OBJBITS (!<OBIT0-15 .VEC> !<OBIT16-31 .VEC>)>
+	<AND <N==? <OLOC .VEC> 0>
+	     <PUT .OBJ ,OBJLOC <GET-OBJ <OLOC .VEC>>>>
+	<AND <N==? <ONEXT .VEC> 0>
+	     <PUT .OBJ ,OBJNEXT <GET-OBJ <ONEXT .VEC>>>>
+	<AND <N==? <OFIRST .VEC> 0>
+	     <PUT .OBJ ,OBJFIRST <GET-OBJ <OFIRST .VEC>>>>
+	<PUT .OBJ ,OBJTBL <VECTOR <ODESC .VEC> <OPROP .VEC>>>
+	<SET PROPS <2 <OBJTBL .OBJ>>>
+	<COND (<SET M <MEMQ PSEUDO .PROPS>>
+	       <PUT .M 3 <SUBS <3 .M> T>>)>
+	<COND (<SET M <MEMQ SYNONYM .PROPS>>
+	       <PUT .M 3 <SUBS <3 .M> T>>)>
+	<COND (<SET M <MEMQ ADJECTIVE .PROPS>>
+	       <PUT .M 3 <SUBS <3 .M>>>)>>
+	       
+<DEFINE SUBS (TBL "OPTIONAL" (ZF <>))
+	#DECL ((TBL) <TABLE [REST <OR ATOM STRING>]> (ZF) <OR FALSE ATOM>)
+	<CHTYPE
+	 <MAPF ,VECTOR
+	      <FUNCTION (E "AUX" ATM VAL)
+			#DECL ((E) <OR ATOM STRING> (VAL) ZOBJECT
+			       (ATM) <OR FALSE ATOM>)
+			 <COND (<TYPE? .E STRING>
+				<SET ATM <LOOKUP .E ,INITIAL>>
+				<COND (.ATM <SET VAL ,.ATM>)
+			              (T
+			               <PRINC "
+Chomping synonym: ">
+			               <PRINC .E>
+			               <SET VAL 0>)>)
+			       (<SET VAL .E>)>
+			 <COND (.ZF
+			        <MAPRET .VAL <CHTYPE (.VAL) FALSE>>)
+			       (.VAL)>>
+	      .TBL> TABLE>>
+
+<DEFINE PRINT-SEQ (SEQTBL PREFIX "AUX" (OUTCHAN .OUTCHAN)) 
+	#DECL ((SEQTBL) <UVECTOR [REST ATOM]> (STR PREFIX) STRING
+	       (OUTCHAN) CHANNEL)
+	<REPEAT ((N <LENGTH .SEQTBL>))
+		#DECL ((N) FIX)
+		<COND (<==? <NTH .SEQTBL .N> T> <RETURN>)
+		      (<IATOM <STRING .PREFIX
+				      <SPNAME <NTH .SEQTBL .N>>>
+		       	      .N>)>
+		<AND <0? <SET N <- .N 1>>> <RETURN>>>>
+
+<DEFINE PRINT-TOP () 
+	<SETG PS?OBJECT 128>
+	<SETG PS?VERB 64>
+	<SETG PS?ADJECTIVE 32>
+	<SETG PS?DIRECTION 16>
+	<SETG PS?PREPOSITION 8>
+	<SETG PS?BUZZ-WORD 4>
+	<SETG P1?OBJECT 0>
+	<SETG P1?VERB 1>
+	<SETG P1?ADJECTIVE 2>
+	<SETG P1?DIRECTION 3>>
+
+<DEFINE CRUMP () 
+	<PRINT-TOP>
+	<PRINT-FLAGS>
+	<PRINT-VERBNUMS>
+	<PRINT-SEQ <TOP ,PROPS> "P?">
+	<PRINT-SEQ <TOP ,ADJS> "A?">
+	<PRINT-SEQ <TOP ,BUZZES> "B?">
+	<PRINT-SEQ <TOP ,PREPS> "PR?">
+	<PRINT-SEQ <TOP ,ACTS> "ACT?">
+	<PRINT-VERBS>
+	<PRINT-ACTIONS>
+	<GC 0 T>
+	<PRINT-VOCAB>
+	<PRINT-OBJECTS>
+	<PRINT-PREPS>
+	<GC 0 T>>
+
+;"ZIL Interpreter"
+
+;"For READST"
+
+<FLOAD "TELL.XBIN">			
+
+<BLOCK (<ROOT>)>
+
+ZO 
+
+<ENDBLOCK>
+
+<SETG ZO <MOBLIST ZO 17>>
+
+<SETG ZOBLS (,INITIAL ,ZO <ROOT>)>
+
+<BLOCK (,ZO)>
+
+BACK
+
+GET 
+
+PUT 
+
+REMOVE 
+
+READ 
+
+RETURN
+
+AGAIN
+
+SAVE
+
+RESTORE
+
+PRINT
+
+PRINTB
+
+APPLY
+
+RANDOM
+
+<ENDBLOCK!- >
+
+<NEWTYPE ZWORD STRING>
+
+<NEWTYPE TABLE VECTOR>
+
+<NEWTYPE OBJECT
+	 VECTOR
+	 '<<PRIMTYPE VECTOR>
+	   ATOM
+	   LIST
+	   <OR FALSE OBJECT>
+	   <OR FALSE OBJECT>
+	   <OR FALSE OBJECT>
+	   VECTOR>>
+
+<SETG 2BYTES ![TABLE STRING FIX ATOM!]>
+
+<SETG 1BYTE ![OBJECT BYTE ATOM FALSE!]>
+
+<PUT ZOBJECT DECL '<OR <PRIMTYPE VECTOR> ZWORD STRING OBJECT FIX ATOM FALSE>>
+
+<DEFINE ZMODE ()
+	<OR <TYPE? ,ZMODE FUNCTION>
+	    <APPLYTYPE FIX ,ZGET>>
+	<OR <==? .OBLIST ,ZOBLS>
+	    <BLOCK ,ZOBLS>>
+	T>
+
+<DEFINE MMODE ()
+	<APPLYTYPE FIX ,APPLY>
+	<AND <==? .OBLIST ,ZOBLS>
+	     <ENDBLOCK>>
+	T>
+
+<DEFINE OBJECT-PRINT (OBJ "AUX" C V L (OUTCHAN .OUTCHAN))
+	#DECL ((OBJ) OBJECT (C) <OR OBJECT FALSE> (V) VECTOR (L) LIST
+	       (OUTCHAN) CHANNEL)
+	<PRINC "#OBJECT [">
+	<PRINC <1 <OBJTBL .OBJ>>>
+	<COND (<OBJLOC .OBJ>
+	       <PRINC " in ">
+	       <PRINC <OBJNAME <OBJLOC .OBJ>>>)>
+	<COND (<SET C <OBJFIRST .OBJ>>
+	       <PRINC " contains ">
+	       <PRINC <OBJNAME .C>>
+	       <REPEAT ()
+		       <COND (<SET C <OBJNEXT .C>>
+			      <PRINC ", ">
+			      <PRINC <OBJNAME .C>>)
+			     (<RETURN>)>>)>
+	<COND (<NOT <EMPTY? <SET L <OBJBITS .OBJ>>>>
+	       <PRINC " flags ">
+	       <MAPF <>
+		     <FUNCTION (ATM)
+			       #DECL ((ATM) ATOM)
+			       <PRINC .ATM>
+			       <PRINC " ">>
+		     .L>)
+	      (<PRINC " no flags">)>
+	<COND (<NOT <EMPTY? <SET V <2 <OBJTBL .OBJ>>>>>
+	       <PRINC " properties ">
+	       <REPEAT ()
+		       <COND (<EMPTY? .V> <RETURN>)
+			     (<PRINC <1 .V>>
+			      <PRINC " ">)>
+		       <SET V <REST .V 3>>>)
+	      (<PRINC " no properties">)>
+	<PRINC "]">>
+
+<PRINTTYPE OBJECT ,OBJECT-PRINT>
+
+<DEFINE TABLE-PRINT (TBL "AUX" (OUTCHAN .OUTCHAN))
+	#DECL ((TBL) TABLE (OUTCHAN) CHANNEL)
+	<PRINC "#TABLE [">
+	<MAPF <>
+	      <FUNCTION (X)
+		 	#DECL ((X) <OR ZOBJECT <FALSE ZOBJECT>>)
+			<COND (.X <PRIN1 .X> <PRINC " ">)
+			      (<PRINC " <?> ">)>>
+	      .TBL>
+	<PRINC "]">>
+
+<PRINTTYPE TABLE ,TABLE-PRINT>
+
+<DEFINE ZGET ("TUPLE" ARGS "AUX" (LEN <LENGTH .ARGS>))
+	#DECL ((ARGS) <TUPLE FIX [REST ANY]> (LEN) FIX)
+	<COND (<==? .LEN 2>
+	       <GET!-ZO <NTH .ARGS 2> <NTH .ARGS 1>>)
+	      (<==? .LEN 3>
+	       <PUT!-ZO <NTH .ARGS 2> <NTH .ARGS 1> <NTH .ARGS 3>>)
+	      (<ERROR FIX-APPLY-ERROR!-ERRORS .ARGS>)>>
+
+<DEFINE BACK!-ZO (TBL NUM)
+	<COND (<GET .TBL PTSIZE>
+	       ,PSEUDO-OBJECT)
+	      (T
+	       <BACK!- .TBL .NUM>)>>
+
+<DEFINE GET!-ZO (TBL ELEM "AUX" VAL)
+	#DECL ((TBL) <OR FIX <PRIMTYPE VECTOR>> (ELEM) FIX
+	       (VAL) <OR ZOBJECT FALSE <FALSE ZOBJECT>>)
+	<COND (<TYPE? .TBL FIX>
+	       0)
+	      (<OR <SET VAL <NTH .TBL <+ <* .ELEM 2> 1>>>
+		   <EMPTY? .VAL>>
+	       .VAL)
+	      (<TYPE? <1 .TBL> ZWORD> 0)
+	      (<ERROR PACKING-ERROR!-ERRORS GET!-ZO .TBL .ELEM <1 .VAL>>)>>
+
+<DEFINE PUT!-ZO (TBL ELEM VAL "AUX" (LOC <+ <* .ELEM 2> 1>))
+	#DECL ((TBL) <OR <PRIMTYPE VECTOR> FIX> (ELEM LOC) FIX (VAL) ZOBJECT)
+	<COND (<==? .TBL ,PSEUDO-OBJECT>
+	       <COND (<TYPE? .VAL ZWORD>
+		      <PUT <OBJTBL .TBL> 1 <CHTYPE .VAL STRING>>)>
+	       T)
+	      (<TYPE? .TBL FIX>
+	       T)
+	      (<OR <NTH .TBL .LOC>
+		   <==? <NTH .TBL .LOC> <>>>
+	       <PUT .TBL .LOC .VAL>
+	       <PUT .TBL <+ .LOC 1> <CHTYPE (.VAL) FALSE>>)
+	      (<ERROR PACKING-ERROR!-ERRORS .TBL .ELEM .VAL>)>>
+
+<DEFINE GETB (TBL ELEM "AUX" VAL)
+	#DECL ((TBL) <OR FIX <PRIMTYPE VECTOR>> (ELEM) FIX
+	       (VAL) <OR ZOBJECT <FALSE ZOBJECT>>)
+	<COND (<TYPE? .TBL FIX> 0)
+	      (<OR <SET VAL <NTH .TBL <+ .ELEM 1>>>
+		   <EMPTY? .VAL>>
+	       .VAL)
+	      (<ERROR PACKING-ERROR!-ERRORS GETB .TBL .ELEM <1 .VAL>>)>>
+
+<DEFINE PUTB (TBL ELEM VAL)
+	#DECL ((TBL) <PRIMTYPE VECTOR> (ELEM) FIX (VAL) ZOBJECT)
+	<COND (<NOT <MEMQ .VAL ,2BYTES>>
+	       <PUT .TBL <+ .ELEM 1> .VAL>)
+	      (<ERROR UNPACKING-ERROR!-ERRORS .TBL .ELEM .VAL>)>>
+
+<DEFINE ZERO? (ANY)
+	#DECL ((ANY) <OR ATOM FIX>)
+	<OR <==? .ANY 0> <==? .ANY T>>>
+
+<DEFINE EQUAL? (ANY A "OPTIONAL" (B #LOSE 0) (C #LOSE 0))
+	#DECL ((ANY A) ZOBJECT (B C) <OR LOSE ZOBJECT>)
+	<OR <==? .ANY .A>
+	    <==? .ANY .B>
+	    <==? .ANY .C>>>
+
+<SETG LESS? ,L?>
+<SETG GRTR? ,G?>
+<SETG ADD ,+>
+<SETG SUB ,->
+<SETG DIV ,/>
+<SETG MUL ,*>
+
+<DEFINE BAND (F1 F2)
+	#DECL ((F1 F2) FIX)
+	<CHTYPE <ANDB .F1 .F2> FIX>>
+
+<DEFINE BOR (F1 F2)
+	#DECL ((F1 F2) FIX)
+	<CHTYPE <ORB .F1 .F2> FIX>>
+
+<DEFINE BCOM (F1)
+	#DECL ((F1) FIX)
+	<CHTYPE <XORB .F1 -1> FIX>>
+
+<DEFINE BTST (F1 F2)
+	#DECL ((F1 F2) FIX)
+	<0? <CHTYPE <ANDB <XORB .F1 -1> .F2> FIX>>>
+
+<DEFINE INC (VAR)
+	#DECL ((VAR) ATOM)
+	<COND (<TYPE? ..VAR FIX>
+	       <SET .VAR <+ ..VAR 1>>)
+	      (<ERROR ILLEGAL-INCREMENT!-ERRORS .VAR>)>
+	T>
+
+<DEFINE DEC (VAR)
+	#DECL ((VAR) ATOM)
+	<COND (<TYPE? ..VAR FIX>
+	       <SET .VAR <- ..VAR 1>>)
+	      (<ERROR ILLEGAL-DECREMENT!-ERRORS .VAR>)>
+	T>
+
+<DEFINE IGRTR? (VAR VAL)
+	#DECL ((VAR) ATOM (VAL) FIX)
+	<INC .VAR>
+	<G? ..VAR .VAL>>
+
+<DEFINE DLESS? (VAR VAL)
+	#DECL ((VAR) ATOM (VAL) FIX)
+	<DEC .VAR>
+	<L? ..VAR .VAL>>
+
+<DEFINE IN? (OBJ1 OBJ2)
+	#DECL ((OBJ1 OBJ2) OBJECT)
+	<==? <OBJLOC .OBJ1> .OBJ2>>
+
+<DEFINE LOC (OBJ)
+	#DECL ((OBJ) OBJECT)
+	<OBJLOC .OBJ>>
+
+<DEFINE FIRST? (OBJ)
+	#DECL ((OBJ) OBJECT)
+	<OBJFIRST .OBJ>>
+
+<DEFINE NEXT? (OBJ)
+	#DECL ((OBJ) OBJECT)
+	<OBJNEXT .OBJ>>
+
+<DEFINE FSET? (OBJ FLAG)
+	#DECL ((OBJ) OBJECT (FLAG) FIX)
+	<AND <MEMQ <GET .FLAG FLAGNAME> <OBJBITS .OBJ>> T>>
+
+<DEFINE FSET (OBJ FLAG "AUX" (BITS <OBJBITS .OBJ>) NAME)
+	#DECL ((OBJ) OBJECT (FLAG) FIX (BITS) <LIST [REST ATOM]> (NAME) ATOM)
+	<COND (<MEMQ <SET NAME <GET .FLAG FLAGNAME>> .BITS>)
+	      (<PUT .OBJ ,OBJBITS (.NAME !.BITS)>
+	       T)>>
+
+<DEFINE FCLEAR (OBJ FLAG "AUX" (BITS <OBJBITS .OBJ>) NAME)
+	#DECL ((OBJ) OBJECT (FLAG) FIX (NAME) ATOM (BITS) <LIST [REST ATOM]>)
+	<COND (<MEMQ <SET NAME <GET .FLAG FLAGNAME>> .BITS>
+	       <PUT .OBJ ,OBJBITS <SPLICE-OUT .NAME .BITS>>)>
+	T>
+
+<DEFINE PRINTD (OBJ)
+	#DECL ((OBJ) OBJECT)
+	<PRINTSTRING <1 <OBJTBL .OBJ>>>
+	T>
+
+<DEFINE PRINTN (F)
+	#DECL ((F) FIX)
+	<PRIN1 .F>
+	T>
+
+<DEFINE PRINTC (F)
+	#DECL ((F) FIX)
+	<PRINTSTRING <STRING <ASCII .F>>>
+	T>
+
+<DEFINE PRINTB!-ZO (TBL "AUX" VAL)
+	#DECL ((TBL) TABLE (VAL) <OR ZOBJECT <FALSE ZOBJECT>>)
+	<COND (<TYPE? <SET VAL <NTH .TBL 1>> ZWORD>
+	       <LCP <CHTYPE .VAL STRING>>)
+	      (<ERROR ILLEGAL-PRINTT!-ERRORS .VAL>)>
+	T>
+
+<DEFINE LCP (STR)
+	#DECL ((STR) STRING)
+	<MAPF <>
+	      <FUNCTION (CHR "AUX" (ASC <ASCII .CHR>))
+			#DECL ((CHR) CHARACTER (ASC) FIX)
+			<COND (<AND <G=? .ASC <ASCII !\A>>
+				    <L=? .ASC <ASCII !\Z>>>
+			       <PRINC <ASCII <+ .ASC 32>>>)
+			      (<PRINC .CHR>)>>
+	      .STR>>
+
+<DEFINE PRINTI (STR)
+	#DECL ((STR) STRING)
+	<PRINTSTRING .STR>
+	T>
+
+<DEFINE RETURN!-ZO RET ("OPTIONAL" (VAL T))
+	#DECL ((VAL) ZOBJECT (RET) <SPECIAL ACTIVATION>)
+	<COND (<ASSIGNED? LPROG\ !-INTERRUPTS <FRAME .RET>>
+	       <RETURN .VAL <LVAL LPROG\ !-INTERRUPTS <FRAME .RET>>>)
+	      (<RETURN .VAL .\ ZACT!-ZO>)>>
+
+<DEFINE AGAIN!-ZO RET ()
+	#DECL ((RET) <SPECIAL ACTIVATION>)
+	<COND (<ASSIGNED? LPROG\ !-INTERRUPTS <FRAME .RET>>
+	       <AGAIN <LVAL LPROG\ !-INTERRUPTS <FRAME .RET>>>)
+	      (<AGAIN .\ ZACT!-ZO>)>>
+
+<DEFINE RTRUE ()
+	<RETURN T .\ ZACT!-ZO>>
+
+<DEFINE RFALSE ()
+	<RETURN <> .\ ZACT!-ZO>>
+
+<DEFINE RESTART ()
+	<GO!-INITIAL!->>
+
+<SETG ZSTACK <IVECTOR 100 0>>
+<GDECL (ZSTACK) VECTOR>
+
+<DEFINE PUSH (ZOB)
+	#DECL ((ZOB) ZOBJECT)
+	<PUT ,ZSTACK 1 .ZOB>
+	<COND (<EMPTY? ,ZSTACK>
+	       <ERROR STACK-FULL!-ERRORS PUSH>)
+	      (<SETG ZSTACK <REST ,ZSTACK>>)>
+	T>
+
+<DEFINE POP (ATM)
+	#DECL ((ATM) ATOM)
+	<COND (<==? <LENGTH ,ZSTACK> <LENGTH <TOP ,ZSTACK>>>
+	       <ERROR STACK-EMPTY!-ERRORS POP>)
+	      (T
+	       <SETG ZSTACK <BACK ,ZSTACK>>
+	       <SET .ATM <1 ,ZSTACK>>
+	       T)>>
+
+<DEFINE RSTACK ()
+	<COND (<==? <LENGTH ,ZSTACK> <LENGTH <TOP ,ZSTACK>>>
+	       <ERROR STACK-EMPTY!-ERRORS RSTACK>)
+	      (T
+	       <SETG ZSTACK <BACK ,ZSTACK>>
+	       <RETURN <1 ,ZSTACK> .\ ZACT!-ZO>)>>
+
+<DEFINE FSTACK ()
+	<COND (<==? <LENGTH ,ZSTACK> <LENGTH <TOP ,ZSTACK>>>
+	       <ERROR STACK-EMPTY!-ERRORS POP>)
+	      (T
+	       <SETG ZSTACK <BACK ,ZSTACK>>
+	       T)>>
+
+<DEFINE JUMP ()
+	<ERROR NOT-IMPLEMENTED!-ERRORS JUMP>>
+
+<DEFINE SAVE!-ZO ()
+	<ERROR NOT-IMPLEMENTED!-ERRORS SAVE>>
+
+<DEFINE RESTORE!-ZO ()
+	<ERROR NOT-IMPLEMENTED!-ERRORS RESTORE>>
+
+<DEFINE PRINT!-ZO (STR)
+	#DECL ((STR) STRING)
+	<PRINTSTRING .STR>>
+
+<DEFINE APPLY!-ZO (FCN "TUPLE" T)
+	#DECL ((FCN) <OR FALSE FIX ATOM> (T) TUPLE)
+	<COND (<AND .FCN <N==? .FCN 0>>
+	       <APPLY ,.FCN !.T>)>>
+
+<SETG CALL ,APPLY!-ZO>
+
+<DEFINE RANDOM!-ZO (NUM)
+	#DECL ((NUM) FIX)
+	<+ <MOD <RANDOM> .NUM> 1>>
+
+<DEFINE NOOP ()
+	T> 
+
+<DEFINE GETP (OBJ PNUM "AUX" M PROP)
+	#DECL ((OBJ) OBJECT (PNUM) FIX (PROP) ATOM
+	       (M) <OR FALSE <VECTOR ATOM FIX TABLE [REST ANY]>>)
+	<SET PROP <NTH <TOP ,PROPS> .PNUM>>
+	<COND (<SET M <MEMQ .PROP <2 <OBJTBL .OBJ>>>>
+	       <COND (<L=? <2 .M> 2>
+		      <NTH <3 .M> 1>)
+		     (<ERROR ILLEGAL-GETP!-ERRORS .OBJ .PROP <3 .M>>)>)
+	      (<GET .PROP DEFAULT>)>>
+
+<DEFINE GETPT (OBJ PNUM "AUX" M PROP)
+	#DECL ((OBJ) OBJECT (PNUM) FIX (PROP) ATOM
+	       (M) <OR FALSE <VECTOR ATOM FIX TABLE [REST ANY]>>)
+	<SET PROP <NTH <TOP ,PROPS> .PNUM>>
+	<COND (<SET M <MEMQ .PROP <2 <OBJTBL .OBJ>>>>
+	       <PUT <3 .M> PTSIZE <2 .M>>
+	       <3 .M>)
+	      (<GET .PROP DEFAULT>)>>
+
+<DEFINE PTSIZE (TBL)
+	#DECL ((TBL) TABLE)
+	<COND (<GET .TBL PTSIZE>)
+	      (<ERROR NOT-A-PROPERTY-TABLE!-ERRORS .TBL>)>>
+
+<DEFINE NEXTP (OBJ PNUM "AUX" PROP (PROPS <2 <OBJTBL .OBJ>>) M) 
+	#DECL ((OBJ) OBJECT (VALUE PNUM) FIX (PROP) ATOM
+	       (PROPS) <VECTOR [REST ATOM FIX TABLE]>
+	       (M) <OR FALSE <VECTOR ATOM FIX TABLE [REST ATOM ANY]>>)
+	<COND (<EMPTY? .PROPS> 0)
+	      (T
+	       <COND (<0? .PNUM> <SET PROP <1 .PROPS>>)
+		     (<SET PROP <NTH <TOP ,PROPS> .PNUM>>)>
+	       <COND (<SET M <MEMQ .PROP .PROPS>>
+		      <COND (<LENGTH? .M 3> 0) (<POS <4 .M> <TOP ,PROPS>>)>)
+		     (<ERROR NOT-A-PROPERTY .PROP .OBJ NEXTP>)>)>>
+ 
+<DEFINE PUTP (OBJ PNUM VAL "AUX" M PROP)
+	#DECL ((OBJ) OBJECT (PROP) ATOM (VAL) ZOBJECT (PNUM) FIX
+	       (M) <OR FALSE <VECTOR ATOM FIX TABLE [REST ANY]>>)
+	<SET PROP <NTH <TOP ,PROPS> .PNUM>>
+	<COND (<SET M <MEMQ .PROP <2 <OBJTBL .OBJ>>>>
+	       <COND (<OR <AND <==? <2 .M> 1>
+			       <MEMQ <TYPE .VAL> ,1BYTE>>
+			  <AND <==? <2 .M> 2>
+			       <MEMQ <TYPE .VAL> ,2BYTES>>
+			  <AND <==? <2 .M> 1>
+			       <TYPE? .VAL FIX>
+			       <L? .VAL 256>
+			       <G=? .VAL 0>>> 
+		      <PUT <3 .M> 1 .VAL>)
+		     (<ERROR ILLEGAL-PUTP!-ERRORS .OBJ .PROP .VAL>)>)
+	      (<ERROR UNDEFINED-PROPERTY!-ERRORS PUTP .PROP>)>>
+
+<DEFINE MOVE (OBJ1 OBJ2)
+	#DECL ((OBJ1 OBJ2) OBJECT)
+	<REMOVE!-ZO .OBJ1>
+	<PUT .OBJ1 ,OBJLOC .OBJ2>
+	<PUT .OBJ1 ,OBJNEXT <OBJFIRST .OBJ2>>
+	<PUT .OBJ2 ,OBJFIRST .OBJ1>
+	T>
+
+<DEFINE REMOVE!-ZO (OBJ "AUX" CNT C)
+	#DECL ((OBJ) OBJECT (CNT C) <OR FALSE OBJECT>)
+	<COND (<SET CNT <OBJLOC .OBJ>>
+	       <COND (<==? <SET C <OBJFIRST .CNT>> .OBJ>
+		      <PUT .CNT ,OBJFIRST <OBJNEXT .OBJ>>)
+		     (T
+		      <REPEAT ()
+			      <COND (<==? <OBJNEXT .C> .OBJ>
+				     <PUT .C ,OBJNEXT <OBJNEXT .OBJ>>
+				     <RETURN>)>
+			      <SET C <OBJNEXT .C>>>)>
+	       <PUT .OBJ ,OBJLOC <>>)>
+	T>
+
+<SETG ZINBUF <ISTRING 200>>
+<SETG ZRWORD <REST <ISTRING 6> 6>>
+<SETG SIBREAKS "">
+<SETG WBREAKS <STRING ".,?"
+		      <ASCII 32>
+		      <ASCII 0>
+		      <ASCII 9>
+		      <ASCII 13>
+		      <ASCII 12>
+		      <ASCII 27>
+		      ,SIBREAKS>>
+
+<GDECL (ZINBUF SIBREAKS WBREAKS ZRWORD) STRING>
+
+<SETG SCRIPT-CHANNEL <>>
+
+<DEFINE UPPERCASE (STR LEN)
+	#DECL ((STR) STRING (LEN) FIX)
+	<MAPR <>
+	      <FUNCTION (S "AUX" (CHR <ASCII <1 .S>>))
+			#DECL ((S) STRING (CHR) FIX)
+			<COND (<L? <SET LEN <- .LEN 1>> 0>
+			       <MAPLEAVE>)>
+			<COND (<AND <G=? .CHR <ASCII !\a>>
+				    <L=? .CHR <ASCII !\z>>>
+			       <PUT .S 1 <ASCII <- .CHR 32>>>)>>
+	      .STR>>
+
+<DEFINE READ!-ZO (BUF LEXV "AUX" (INS ,ZINBUF) (VOCAB ,VOCABULARY) LEN) 
+   #DECL ((BUF LEXV) <PRIMTYPE VECTOR> (INS) STRING (VOCAB) OBLIST (LEN) FIX)
+   <SET BUF <REST .BUF>>
+   <SET LEXV <REST .LEXV 2>>
+   <SET LEN <READST .INS "" <>>>
+   <UPPERCASE .INS .LEN>
+   <REPEAT (CHR ASC (INWORD <>) WRD (WLEN 0) (NWRDS 0) WPTR ATM)
+     #DECL ((CHR) CHARACTER (INWORD ATM) <OR ATOM FALSE> (WRD WPTR) STRING
+	    (WLEN NWRDS ASC) FIX)
+     <COND (<L? <SET LEN <- .LEN 1>> 0> <SET CHR <ASCII 0>>)
+	   (T <SET CHR <1 .INS>>)>
+     <SET ASC <ASCII .CHR>>
+     <PUT .BUF
+	  1
+	  <COND (<AND <G=? .ASC <ASCII !\A>> <L=? .ASC <ASCII !\Z>>>
+		 <+ .ASC 32>)
+		(.ASC)>>
+     <SET BUF <REST .BUF>>
+     <COND (<MEMQ .CHR ,WBREAKS>
+	    <COND (<AND <NOT .INWORD> <NOT <MEMQ .CHR ,SIBREAKS>>>)
+		  (T
+		   <SET WRD
+			<SUBSTRUC .WPTR
+				  0
+				  <MIN 6 .WLEN>
+				  <BACK ,ZRWORD <MIN 6 .WLEN>>>>
+		   <PROG ()
+			 <COND (.INWORD
+				<COND (<SET ATM <LOOKUP .WRD .VOCAB>>
+				       <PUT .LEXV 1 ,.ATM>
+				       <PUT .LEXV 2 <CHTYPE (,.ATM) FALSE>>)
+				      (T
+				       <PUT .LEXV 1 <>>
+				       <PUT .LEXV 2 <CHTYPE (<>) FALSE>>)>
+				<PUT .LEXV 3 .WLEN>
+				<PUT .LEXV
+				     4
+				     <- <LENGTH <TOP .INS>> <LENGTH .WPTR> -1>>
+				<SET LEXV <REST .LEXV 4>>
+				<SET NWRDS <+ .NWRDS 1>>
+				<SET WLEN 0>
+				<SET INWORD <>>)>
+			 <COND (<MEMQ .CHR ,SIBREAKS>
+				<SET WRD <STRING .CHR>>
+				<OR <==? .LEXV <REST <TOP .LEXV> 2>>
+				    <==? <1 <BACK .LEXV 4>>
+					 ,<LOOKUP .WRD .VOCAB>>
+				    <AND <SET INWORD T> <AGAIN>>>)>>)>
+	    <COND (<==? .CHR <ASCII 0>> <PUT <TOP .LEXV> 2 .NWRDS> <RETURN>)>)
+	   (T
+	    <COND (<NOT .INWORD> <SET WPTR .INS> <SET INWORD T>)>
+	    <SET WLEN <+ .WLEN 1>>)>
+     <SET INS <REST .INS>>>>
+
+<DEFINE SPLICE-OUT (OBJ AL) 
+	#DECL ((AL) LIST (OBJ) ANY)
+	<COND (<==? <1 .AL> .OBJ> <REST .AL>)
+	      (T
+	       <REPEAT ((NL <REST .AL>) (OL .AL))
+		       #DECL ((NL) LIST (OL) <LIST ANY>)
+		       <COND (<==? <1 .NL> .OBJ>
+			      <PUTREST .OL <REST .NL>>
+			      <RETURN .AL>)
+			     (<SET OL .NL> <SET NL <REST .NL>>)>>)>>
+
+<DEFINE ZLOAD (STR)
+	#DECL ((STR) STRING)
+	<ZFLOAD .STR>
+	<CRUMP>
+	"DONE">
+
+<DEFINE ZDUMP (ATM)
+	#DECL ((ATM) ATOM)
+	<GROUP-DUMP <STRING <SPNAME .ATM> ".ZIL"> .ATM>>
+
+<DEFINE ZIL ()
+	<ZMODE>
+	<GO!-INITIAL!->>
+
+<DEFINE ZFLOAD (STR "OPTIONAL" (FLOAD? <>))
+    #DECL ((STR) STRING (FLOAD?) <OR ATOM FALSE>)
+    <PRINC "Loading ">
+    <PRINC .STR>
+    <PRINC ".ZIL">
+    <COND (.FLOAD? <PRINC " (FLOAD)">)>
+    <CRLF>
+    <BLOCK ,ZOBLS>
+    <COND (.FLOAD? <FLOAD <STRING .STR ".ZIL">>)
+	  (T <GROUP-LOAD <STRING .STR ".ZIL">>)>
+    <ENDBLOCK>
+    T>
+
+<DEFINE ZILSAVE ("AUX" FOO)
+	#DECL ((FOO) ATOM)
+	<COND (<SAVE "ZIL">
+	       <PRINC "Load: ">
+	       <SET FOO <READ>>
+	       <CRLF>
+	       <ZLOAD <UNPARSE .FOO>>
+	       <PRINC "Go: ">
+	       <COND (<MEMQ <TYI> "TtYy">
+		      <ZIL>)>)>>
+
+<SETG COMPERR ,ERROR>
+
